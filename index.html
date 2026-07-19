@@ -1,18 +1,1382 @@
 <!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#1a2744" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Wohnung" />
-    <link rel="apple-touch-icon" href="/Wohnung/apple-touch-icon.png" />
-    <title>Mietwohnungs-Tracker</title>
-    <script type="module" crossorigin src="/Wohnung/assets/index-4cQPpmge.js"></script>
-    <link rel="stylesheet" crossorigin href="/Wohnung/assets/index-BHnjc06o.css">
-  <link rel="manifest" href="/Wohnung/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/Wohnung/registerSW.js"></script></head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1a2744" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Wohnung" />
+  <title>Mietwohnungs-Tracker</title>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, serverTimestamp }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBKgDaPcntG_EVWESjhUvzcvja3QWVX7mU",
+      authDomain: "wohnung-7fe03.firebaseapp.com",
+      projectId: "wohnung-7fe03",
+      storageBucket: "wohnung-7fe03.firebasestorage.app",
+      messagingSenderId: "961868714782",
+      appId: "1:961868714782:web:aa2bf0ba5205729f672f0f"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // ── Constants ──────────────────────────────────────────
+    const EINNAHMEN_KAT = [
+      { id: 'miete',          label: 'Kaltmiete',                    icon: '🏠' },
+      { id: 'nebenkosten_vz', label: 'Nebenkostenvorauszahlung',     icon: '💧' },
+      { id: 'kaution',        label: 'Kaution',                      icon: '🔐' },
+      { id: 'nachzahlung',    label: 'Nachzahlung Mieter',           icon: '↩️' },
+      { id: 'sonstiges_ein',  label: 'Sonstiges',                    icon: '📋' },
+    ];
+    const AUSGABEN_KAT = [
+      { id: 'grundsteuer',      label: 'Grundsteuer',                          icon: '🏛️', betrKV: true,  betrKVNr: 1  },
+      { id: 'wasser',           label: 'Wasser & Abwasser',                    icon: '💧', betrKV: true,  betrKVNr: 2  },
+      { id: 'heizung',          label: 'Heizung',                              icon: '🔥', betrKV: true,  betrKVNr: 4  },
+      { id: 'warmwasser',       label: 'Warmwasser',                           icon: '♨️', betrKV: true,  betrKVNr: 5  },
+      { id: 'aufzug',           label: 'Fahrstuhl / Aufzug',                   icon: '🛗', betrKV: true,  betrKVNr: 7  },
+      { id: 'muell',            label: 'Müllabfuhr',                           icon: '🗑️', betrKV: true,  betrKVNr: 8  },
+      { id: 'strassenreinigung',label: 'Strassenreinigung',                    icon: '🧹', betrKV: true,  betrKVNr: 8  },
+      { id: 'gebaeudereinigung',label: 'Gebäudereinigung',                     icon: '🧽', betrKV: true,  betrKVNr: 9  },
+      { id: 'gartenpflege',     label: 'Gartenpflege',                         icon: '🌿', betrKV: true,  betrKVNr: 10 },
+      { id: 'allgemeinstrom',   label: 'Allgemeinstrom',                       icon: '💡', betrKV: true,  betrKVNr: 11 },
+      { id: 'schornstein',      label: 'Schornsteinreinigung',                 icon: '🏗️', betrKV: true,  betrKVNr: 12 },
+      { id: 'versicherung',     label: 'Sach- & Haftpflichtversicherung',      icon: '🛡️', betrKV: true,  betrKVNr: 13 },
+      { id: 'hauswart',         label: 'Hauswart',                             icon: '👷', betrKV: true,  betrKVNr: 14 },
+      { id: 'kabel',            label: 'Kabelgebühren / Internet',             icon: '📡', betrKV: true,  betrKVNr: 15 },
+      { id: 'sonstige_betrKV',  label: 'Sonstige Betriebskosten (BetrKV)',    icon: '📦', betrKV: true,  betrKVNr: 17 },
+      { id: 'reparatur',        label: 'Reparaturen',                          icon: '🔧', betrKV: false },
+      { id: 'verwaltung',       label: 'Verwaltungskosten',                    icon: '📁', betrKV: false },
+      { id: 'hypothek',         label: 'Hypothek / Zinsen',                    icon: '🏦', betrKV: false },
+      { id: 'steuer',           label: 'Steuern',                              icon: '📊', betrKV: false },
+      { id: 'sonstiges_aus',    label: 'Sonstiges',                            icon: '📋', betrKV: false },
+    ];
+    const ALLE_KAT = [...EINNAHMEN_KAT, ...AUSGABEN_KAT];
+    const MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+    const WAEHRUNGEN = [{ code:'EUR', sym:'€' }, { code:'CHF', sym:'CHF ' }];
+    const STEUER_LAENDER = [
+      { id:'de_bw', label:'Deutschland – Baden-Württemberg' },
+      { id:'ch',    label:'Schweiz' },
+    ];
+
+    // ── State ──────────────────────────────────────────────
+    let state = {
+      user: undefined,       // undefined=loading, null=logged out
+      page: 'wohnungen',     // wohnungen | dashboard | buchungen | nebenkosten | export
+      wohnungId: null,
+      wohnungen: [],
+      buchungen: [],
+      mieter: null,
+      wohnungenLoading: true,
+      buchungenLoading: true,
+      mieterLoading: true,
+      // listeners
+      _unsubWohnungen: null,
+      _unsubBuchungen: null,
+      _unsubMieter: null,
+    };
+
+    // ── Firestore listeners ────────────────────────────────
+    function subscribeWohnungen(uid) {
+      if (state._unsubWohnungen) state._unsubWohnungen();
+      state.wohnungenLoading = true;
+      const q = query(collection(db,'wohnungen'), where('userId','==',uid));
+      state._unsubWohnungen = onSnapshot(q, snap => {
+        state.wohnungen = snap.docs.map(d=>({id:d.id,...d.data()}))
+          .sort((a,b)=>(a.createdAt?.toMillis?.()??0)-(b.createdAt?.toMillis?.()??0));
+        state.wohnungenLoading = false;
+        render();
+      }, ()=>{ state.wohnungenLoading=false; render(); });
+    }
+
+    function subscribeBuchungen(uid, wohnungId) {
+      if (state._unsubBuchungen) state._unsubBuchungen();
+      state.buchungenLoading = true;
+      const q = query(collection(db,'buchungen'), where('userId','==',uid), where('wohnungId','==',wohnungId));
+      state._unsubBuchungen = onSnapshot(q, snap => {
+        state.buchungen = snap.docs.map(d=>({id:d.id,...d.data()}))
+          .sort((a,b)=>b.datum?.localeCompare?.(a.datum)??0);
+        state.buchungenLoading = false;
+        render();
+      }, ()=>{ state.buchungenLoading=false; render(); });
+    }
+
+    function subscribeMieter(uid, wohnungId) {
+      if (state._unsubMieter) state._unsubMieter();
+      state.mieterLoading = true;
+      const q = query(collection(db,'mieter'), where('userId','==',uid), where('wohnungId','==',wohnungId));
+      state._unsubMieter = onSnapshot(q, snap => {
+        state.mieter = snap.empty ? null : {id:snap.docs[0].id,...snap.docs[0].data()};
+        state.mieterLoading = false;
+        render();
+      }, ()=>{ state.mieterLoading=false; render(); });
+    }
+
+    // ── Navigation ─────────────────────────────────────────
+    function navigate(page, wohnungId=null) {
+      state.page = page;
+      if (wohnungId) state.wohnungId = wohnungId;
+      if (wohnungId && state.user) {
+        subscribeBuchungen(state.user.uid, wohnungId);
+        subscribeMieter(state.user.uid, wohnungId);
+      }
+      render();
+    }
+
+    // ── Auth ───────────────────────────────────────────────
+    onAuthStateChanged(auth, user => {
+      state.user = user;
+      if (user) {
+        subscribeWohnungen(user.uid);
+        if (state.wohnungId) {
+          subscribeBuchungen(user.uid, state.wohnungId);
+          subscribeMieter(user.uid, state.wohnungId);
+        }
+      } else {
+        state.wohnungen = [];
+        state.buchungen = [];
+        state.mieter = null;
+        state.page = 'wohnungen';
+        state.wohnungId = null;
+      }
+      render();
+    });
+
+    // ── Helpers ────────────────────────────────────────────
+    function fmt(n, waehrung) {
+      const sym = waehrung==='CHF' ? 'CHF ' : '€';
+      return `${sym}${Number(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    }
+    function today() { return new Date().toISOString().split('T')[0]; }
+    function getWohnung() { return state.wohnungen.find(w=>w.id===state.wohnungId); }
+    function katLabel(id) { return ALLE_KAT.find(k=>k.id===id)?.label || id; }
+    function katIcon(id) { return ALLE_KAT.find(k=>k.id===id)?.icon || ''; }
+    function yearRange() {
+      const y=new Date().getFullYear(); return [y+1,y,y-1,y-2];
+    }
+    function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    // ── Render ─────────────────────────────────────────────
+    function render() {
+      const root = document.getElementById('root');
+      if (!root) return;
+
+      if (state.user === undefined) {
+        root.innerHTML = `<div class="loading-screen"><div class="spinner"></div></div>`;
+        return;
+      }
+      if (!state.user) {
+        root.innerHTML = renderLogin();
+        attachLogin();
+        return;
+      }
+      // logged in
+      switch(state.page) {
+        case 'wohnungen':   root.innerHTML = renderWohnungen();   attachWohnungen();   break;
+        case 'dashboard':   root.innerHTML = renderDashboard();   attachDashboard();   break;
+        case 'buchungen':   root.innerHTML = renderBuchungen();   attachBuchungen();   break;
+        case 'nebenkosten': root.innerHTML = renderNebenkosten(); attachNebenkosten(); break;
+        case 'export':      root.innerHTML = renderExport();      attachExport();      break;
+        default:            root.innerHTML = renderWohnungen();   attachWohnungen();
+      }
+    }
+
+    // ══════════════════════════════════════════════════════
+    // LOGIN
+    // ══════════════════════════════════════════════════════
+    function renderLogin() {
+      return `
+      <div class="login-bg">
+        <div class="login-card">
+          <div class="login-icon">🏠</div>
+          <h1 class="login-title">Mietwohnungs-Tracker</h1>
+          <p class="login-sub">Einnahmen & Ausgaben im Griff</p>
+          <form id="loginForm" class="login-form">
+            <div class="field">
+              <label>E-Mail</label>
+              <input type="email" id="loginEmail" placeholder="deine@email.de" required autocomplete="email" />
+            </div>
+            <div class="field">
+              <label>Passwort</label>
+              <input type="password" id="loginPw" placeholder="••••••••" required autocomplete="current-password" />
+            </div>
+            <div id="loginError" class="error-msg" style="display:none"></div>
+            <button type="submit" class="btn-primary btn-full" id="loginBtn">Anmelden</button>
+          </form>
+          <button id="loginToggle" class="login-switch">Noch kein Konto? Registrieren</button>
+        </div>
+      </div>`;
+    }
+
+    function attachLogin() {
+      let isRegister = false;
+      const form = document.getElementById('loginForm');
+      const toggle = document.getElementById('loginToggle');
+      const btn = document.getElementById('loginBtn');
+      const errEl = document.getElementById('loginError');
+      const pwInput = document.getElementById('loginPw');
+
+      toggle.onclick = () => {
+        isRegister = !isRegister;
+        btn.textContent = isRegister ? 'Konto erstellen' : 'Anmelden';
+        toggle.textContent = isRegister ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren';
+        pwInput.autocomplete = isRegister ? 'new-password' : 'current-password';
+        errEl.style.display = 'none';
+      };
+
+      form.onsubmit = async e => {
+        e.preventDefault();
+        errEl.style.display = 'none';
+        btn.disabled = true; btn.textContent = '…';
+        const email = document.getElementById('loginEmail').value;
+        const pw = pwInput.value;
+        try {
+          if (isRegister) await createUserWithEmailAndPassword(auth, email, pw);
+          else await signInWithEmailAndPassword(auth, email, pw);
+        } catch(err) {
+          const msgs = {
+            'auth/user-not-found':'Kein Konto mit dieser E-Mail.',
+            'auth/wrong-password':'Falsches Passwort.',
+            'auth/email-already-in-use':'E-Mail bereits registriert.',
+            'auth/weak-password':'Passwort muss mind. 6 Zeichen haben.',
+            'auth/invalid-email':'Ungültige E-Mail.',
+            'auth/invalid-credential':'E-Mail oder Passwort falsch.',
+          };
+          errEl.textContent = msgs[err.code] || err.message;
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = isRegister ? 'Konto erstellen' : 'Anmelden';
+        }
+      };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // WOHNUNGEN
+    // ══════════════════════════════════════════════════════
+    function renderWohnungen() {
+      if (state.wohnungenLoading) return `<div class="loading-screen"><div class="spinner"></div></div>`;
+      return `
+      <div class="page">
+        <header class="page-header">
+          <div>
+            <h1>Meine Wohnungen</h1>
+            <p class="header-sub">Wähle eine Wohnung zum Verwalten</p>
+          </div>
+          <button id="btnSignOut" class="btn-ghost">Abmelden</button>
+        </header>
+        <div class="wohnungen-grid" id="wohnungenGrid">
+          ${state.wohnungen.map(w=>`
+            <div class="wohnung-card" data-id="${esc(w.id)}">
+              <div class="wohnung-icon">🏠</div>
+              <div class="wohnung-info">
+                <strong>${esc(w.adresse)}</strong>
+                <span class="badge">${esc(w.waehrung)}</span>
+                ${w.wohnflaeche ? `<small>${esc(w.wohnflaeche)} m²</small>` : ''}
+              </div>
+              <span class="arrow">›</span>
+            </div>`).join('')}
+          <button class="wohnung-add-btn" id="btnAddWohnung">
+            <span class="add-plus">+</span>
+            <span>Wohnung hinzufügen</span>
+          </button>
+        </div>
+      </div>
+      <!-- Modal -->
+      <div class="modal-overlay" id="wohnungModal" style="display:none">
+        <div class="modal">
+          <h2>Neue Wohnung</h2>
+          <form id="wohnungForm">
+            <div class="field"><label>Adresse *</label>
+              <input name="adresse" placeholder="Musterstr. 1, 70173 Stuttgart" required /></div>
+            <div class="field"><label>Währung</label>
+              <select name="waehrung">
+                <option value="EUR">Euro (€)</option>
+                <option value="CHF">Schweizer Franken (CHF)</option>
+              </select></div>
+            <div class="field"><label>Wohnfläche (m²)</label>
+              <input name="wohnflaeche" type="number" placeholder="75" /></div>
+            <div class="field"><label>Dein Name (Vermieter)</label>
+              <input name="vermieterName" placeholder="Max Mustermann" /></div>
+            <div class="field"><label>Deine Adresse (Vermieter)</label>
+              <input name="vermieterAdresse" placeholder="Hauptstr. 10, 8001 Zürich" /></div>
+            <div class="modal-actions">
+              <button type="button" class="btn-ghost" id="btnCancelWohnung">Abbrechen</button>
+              <button type="submit" class="btn-primary" id="btnSaveWohnung">Speichern</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    function attachWohnungen() {
+      document.getElementById('btnSignOut').onclick = () => signOut(auth);
+      document.getElementById('btnAddWohnung').onclick = () => {
+        document.getElementById('wohnungModal').style.display = 'flex';
+      };
+      document.getElementById('btnCancelWohnung').onclick = () => {
+        document.getElementById('wohnungModal').style.display = 'none';
+      };
+      document.getElementById('wohnungModal').onclick = e => {
+        if (e.target === document.getElementById('wohnungModal'))
+          document.getElementById('wohnungModal').style.display = 'none';
+      };
+      document.getElementById('wohnungForm').onsubmit = async e => {
+        e.preventDefault();
+        const btn = document.getElementById('btnSaveWohnung');
+        btn.disabled = true; btn.textContent = '…';
+        const fd = new FormData(e.target);
+        await addDoc(collection(db,'wohnungen'), {
+          adresse: fd.get('adresse'),
+          waehrung: fd.get('waehrung'),
+          wohnflaeche: fd.get('wohnflaeche'),
+          vermieterName: fd.get('vermieterName'),
+          vermieterAdresse: fd.get('vermieterAdresse'),
+          userId: state.user.uid,
+          createdAt: serverTimestamp()
+        });
+        document.getElementById('wohnungModal').style.display = 'none';
+        e.target.reset();
+        btn.disabled = false; btn.textContent = 'Speichern';
+      };
+      document.querySelectorAll('.wohnung-card').forEach(card => {
+        card.onclick = () => navigate('dashboard', card.dataset.id);
+      });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // DASHBOARD
+    // ══════════════════════════════════════════════════════
+    function renderDashboard() {
+      const w = getWohnung();
+      if (state.buchungenLoading) return loadingWithNav('dashboard');
+      const year = state._dashYear || new Date().getFullYear();
+      const waehrung = w?.waehrung || 'EUR';
+
+      const jb = state.buchungen.filter(b=>b.datum?.startsWith(String(year)));
+      const sumEin = jb.filter(b=>b.typ==='einnahme').reduce((a,b)=>a+(b.betrag||0),0);
+      const sumAus = jb.filter(b=>b.typ==='ausgabe').reduce((a,b)=>a+(b.betrag||0),0);
+      const saldo  = sumEin - sumAus;
+
+      // Chart data (simple bar via divs)
+      const chartRows = MONATE.map((m,i)=>{
+        const mStr = `${year}-${String(i+1).padStart(2,'0')}`;
+        const ein = state.buchungen.filter(b=>b.typ==='einnahme'&&b.datum?.startsWith(mStr)).reduce((a,b)=>a+(b.betrag||0),0);
+        const aus = state.buchungen.filter(b=>b.typ==='ausgabe'&&b.datum?.startsWith(mStr)).reduce((a,b)=>a+(b.betrag||0),0);
+        return {m:m.substring(0,3), ein, aus};
+      });
+      const chartMax = Math.max(...chartRows.map(r=>Math.max(r.ein,r.aus)), 1);
+
+      // Top Ausgaben
+      const ausMap = {};
+      jb.filter(b=>b.typ==='ausgabe').forEach(b=>{ ausMap[b.kategorie]=(ausMap[b.kategorie]||0)+(b.betrag||0); });
+      const topAus = Object.entries(ausMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+      const letzte = state.buchungen.slice(0,5);
+
+      return `
+      <div class="page">
+        <header class="page-header">
+          <div>
+            <button class="back-btn" id="btnBack">‹ Zurück</button>
+            <h1>${esc(w?.adresse||'Dashboard')}</h1>
+          </div>
+          <select class="year-select" id="dashYearSel">
+            ${yearRange().map(y=>`<option value="${y}" ${y===year?'selected':''}>${y}</option>`).join('')}
+          </select>
+        </header>
+
+        <div class="kpi-row">
+          <div class="kpi-card kpi-ein"><div class="kpi-label">Einnahmen ${year}</div><div class="kpi-value">${fmt(sumEin,waehrung)}</div></div>
+          <div class="kpi-card kpi-aus"><div class="kpi-label">Ausgaben ${year}</div><div class="kpi-value">${fmt(sumAus,waehrung)}</div></div>
+          <div class="kpi-card ${saldo>=0?'kpi-pos':'kpi-neg'}"><div class="kpi-label">Saldo ${year}</div><div class="kpi-value">${fmt(saldo,waehrung)}</div></div>
+        </div>
+
+        <div class="card">
+          <h3>Einnahmen & Ausgaben ${year}</h3>
+          <div class="bar-chart">
+            ${chartRows.map(r=>`
+              <div class="bar-col">
+                <div class="bar-group">
+                  <div class="bar bar-ein" style="height:${Math.round((r.ein/chartMax)*80)}px" title="${fmt(r.ein,waehrung)}"></div>
+                  <div class="bar bar-aus" style="height:${Math.round((r.aus/chartMax)*80)}px" title="${fmt(r.aus,waehrung)}"></div>
+                </div>
+                <div class="bar-label">${r.m}</div>
+              </div>`).join('')}
+          </div>
+          <div class="chart-legend">
+            <span class="legend-dot" style="background:var(--green)"></span> Einnahmen
+            <span class="legend-dot" style="background:var(--red); margin-left:12px"></span> Ausgaben
+          </div>
+        </div>
+
+        ${topAus.length>0?`
+        <div class="card">
+          <h3>Top Ausgaben ${year}</h3>
+          ${topAus.map(([kat,sum],i)=>`
+            <div class="top-item">
+              <span class="top-label">${esc(katIcon(kat))} ${esc(katLabel(kat))}</span>
+              <div class="top-bar-wrap"><div class="top-bar" style="width:${Math.round((sum/topAus[0][1])*100)}%"></div></div>
+              <span class="top-value">${fmt(sum,waehrung)}</span>
+            </div>`).join('')}
+        </div>`:''}
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Letzte Buchungen</h3>
+            <button class="btn-link" id="btnAlleBuchungen">Alle anzeigen ›</button>
+          </div>
+          ${letzte.length===0
+            ? `<p class="empty-state">Noch keine Buchungen. <button class="btn-link" id="btnFirstBuchung">Jetzt erfassen ›</button></p>`
+            : letzte.map(b=>`
+              <div class="buchung-row">
+                <div class="buchung-left">
+                  <span class="typ-dot ${esc(b.typ)}"></span>
+                  <div>
+                    <div class="buchung-notiz">${esc(b.notiz||b.kategorieLabel||b.kategorie)}</div>
+                    <div class="buchung-datum">${esc(b.datum)}</div>
+                  </div>
+                </div>
+                <span class="buchung-betrag ${esc(b.typ)}">${b.typ==='einnahme'?'+':'-'}${fmt(b.betrag,waehrung)}</span>
+              </div>`).join('')}
+        </div>
+
+        ${bottomNav('dashboard')}
+      </div>`;
+    }
+
+    function attachDashboard() {
+      document.getElementById('btnBack').onclick = ()=>navigate('wohnungen');
+      document.getElementById('btnAlleBuchungen')?.onclick = ()=>navigate('buchungen');
+      document.getElementById('btnFirstBuchung')?.onclick = ()=>navigate('buchungen');
+      document.getElementById('dashYearSel').onchange = e => {
+        state._dashYear = Number(e.target.value); render();
+      };
+      attachBottomNav();
+    }
+
+    // ══════════════════════════════════════════════════════
+    // BUCHUNGEN
+    // ══════════════════════════════════════════════════════
+    function renderBuchungen() {
+      const w = getWohnung();
+      if (state.buchungenLoading) return loadingWithNav('buchungen');
+      const waehrung = w?.waehrung||'EUR';
+      const filterTyp  = state._buchFilterTyp  || 'alle';
+      const filterJahr = state._buchFilterJahr || new Date().getFullYear();
+      const filterMonat= state._buchFilterMonat|| 'alle';
+
+      const gefiltert = state.buchungen.filter(b=>{
+        if (filterTyp!=='alle'&&b.typ!==filterTyp) return false;
+        if (!b.datum?.startsWith(String(filterJahr))) return false;
+        if (filterMonat!=='alle') {
+          const m = String(Number(filterMonat)).padStart(2,'0');
+          if (!b.datum?.startsWith(`${filterJahr}-${m}`)) return false;
+        }
+        return true;
+      });
+      const sumEin = gefiltert.filter(b=>b.typ==='einnahme').reduce((a,b)=>a+(b.betrag||0),0);
+      const sumAus = gefiltert.filter(b=>b.typ==='ausgabe').reduce((a,b)=>a+(b.betrag||0),0);
+
+      return `
+      <div class="page">
+        <header class="page-header">
+          <div>
+            <button class="back-btn" id="btnBack">‹ Dashboard</button>
+            <h1>Buchungen</h1>
+          </div>
+          <button class="btn-primary btn-sm" id="btnNewBuchung">+ Neu</button>
+        </header>
+
+        <div class="filter-row">
+          <div class="seg-ctrl">
+            ${['alle','einnahme','ausgabe'].map(t=>`
+              <button class="seg-btn ${filterTyp===t?'active':''}" data-typ="${t}">
+                ${t==='alle'?'Alle':t==='einnahme'?'Einnahmen':'Ausgaben'}
+              </button>`).join('')}
+          </div>
+          <div class="filter-selects">
+            <select id="buchJahrSel">
+              ${yearRange().map(y=>`<option value="${y}" ${y===filterJahr?'selected':''}>${y}</option>`).join('')}
+            </select>
+            <select id="buchMonatSel">
+              <option value="alle">Alle Monate</option>
+              ${MONATE.map((m,i)=>`<option value="${i+1}" ${String(i+1)===filterMonat?'selected':''}>${m}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="mini-saldo">
+          <span class="ein-sum">+ ${fmt(sumEin,waehrung)}</span>
+          <span class="divider">|</span>
+          <span class="aus-sum">− ${fmt(sumAus,waehrung)}</span>
+          <span class="divider">|</span>
+          <span class="saldo-sum ${sumEin-sumAus>=0?'pos':'neg'}">${fmt(sumEin-sumAus,waehrung)}</span>
+        </div>
+
+        <div class="buchungen-full-list">
+          ${gefiltert.length===0
+            ? `<div class="empty-state-big"><div>📋</div><p>Keine Buchungen gefunden</p><button class="btn-primary" id="btnEmptyNew">Erste Buchung erfassen</button></div>`
+            : gefiltert.map(b=>`
+              <div class="buchung-item">
+                <div class="buchung-typ-bar ${esc(b.typ)}"></div>
+                <div class="buchung-content">
+                  <div class="buchung-main">
+                    <span class="buchung-kat">${esc(katIcon(b.kategorie))} ${esc(b.kategorieLabel||katLabel(b.kategorie))}</span>
+                    <span class="buchung-betrag-lg ${esc(b.typ)}">${b.typ==='einnahme'?'+':'−'}${fmt(b.betrag,waehrung)}</span>
+                  </div>
+                  ${b.notiz?`<div class="buchung-notiz-text">${esc(b.notiz)}</div>`:''}
+                  <div class="buchung-meta">
+                    <span>${esc(b.datum)}</span>
+                    <button class="delete-btn" data-id="${esc(b.id)}">🗑</button>
+                  </div>
+                </div>
+              </div>`).join('')}
+        </div>
+
+        ${bottomNav('buchungen')}
+      </div>
+
+      <!-- Delete confirm -->
+      <div class="modal-overlay" id="deleteModal" style="display:none">
+        <div class="modal modal-sm">
+          <h3>Buchung löschen?</h3>
+          <p>Diese Aktion kann nicht rückgängig gemacht werden.</p>
+          <div class="modal-actions">
+            <button class="btn-ghost" id="btnCancelDelete">Abbrechen</button>
+            <button class="btn-danger" id="btnConfirmDelete">Löschen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- New Buchung modal -->
+      <div class="modal-overlay" id="buchungModal" style="display:none">
+        <div class="modal">
+          <h2>Neue Buchung</h2>
+          <div class="seg-ctrl mb" id="buchTypSeg">
+            <button class="seg-btn active" data-typ="einnahme">Einnahme</button>
+            <button class="seg-btn" data-typ="ausgabe">Ausgabe</button>
+          </div>
+          <form id="buchungForm">
+            <input type="hidden" name="typ" value="einnahme" />
+            <div class="field"><label>Datum *</label>
+              <input type="date" name="datum" value="${today()}" required /></div>
+            <div class="field"><label>Betrag (${waehrung}) *</label>
+              <input type="number" name="betrag" step="0.01" min="0" placeholder="0.00" required /></div>
+            <div class="field"><label>Kategorie *</label>
+              <select name="kategorie" id="buchKatSel">
+                ${EINNAHMEN_KAT.map(k=>`<option value="${k.id}">${k.icon} ${k.label}</option>`).join('')}
+              </select></div>
+            <div class="field"><label>Notiz</label>
+              <input name="notiz" placeholder="z.B. Januarmiete 2025" /></div>
+            <div class="modal-actions">
+              <button type="button" class="btn-ghost" id="btnCancelBuchung">Abbrechen</button>
+              <button type="submit" class="btn-primary" id="btnSaveBuchung">Speichern</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    function attachBuchungen() {
+      document.getElementById('btnBack').onclick = ()=>navigate('dashboard');
+      attachBottomNav();
+
+      const openModal = ()=>{ document.getElementById('buchungModal').style.display='flex'; };
+      document.getElementById('btnNewBuchung').onclick = openModal;
+      document.getElementById('btnEmptyNew')?.onclick = openModal;
+
+      // Typ filter
+      document.querySelectorAll('.seg-ctrl:first-of-type .seg-btn').forEach(btn=>{
+        btn.onclick = ()=>{ state._buchFilterTyp=btn.dataset.typ; render(); };
+      });
+      document.getElementById('buchJahrSel').onchange = e=>{ state._buchFilterJahr=Number(e.target.value); render(); };
+      document.getElementById('buchMonatSel').onchange = e=>{ state._buchFilterMonat=e.target.value; render(); };
+
+      // Delete
+      let deleteId = null;
+      document.querySelectorAll('.delete-btn').forEach(btn=>{
+        btn.onclick = e=>{ e.stopPropagation(); deleteId=btn.dataset.id; document.getElementById('deleteModal').style.display='flex'; };
+      });
+      document.getElementById('btnCancelDelete').onclick = ()=>{ document.getElementById('deleteModal').style.display='none'; };
+      document.getElementById('btnConfirmDelete').onclick = async ()=>{
+        if (deleteId) await deleteDoc(doc(db,'buchungen',deleteId));
+        document.getElementById('deleteModal').style.display='none';
+      };
+
+      // Modal: typ toggle
+      const typSeg = document.getElementById('buchTypSeg');
+      const katSel = document.getElementById('buchKatSel');
+      const typInput = document.querySelector('#buchungForm input[name="typ"]');
+      typSeg.querySelectorAll('.seg-btn').forEach(btn=>{
+        btn.onclick = ()=>{
+          typSeg.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          typInput.value = btn.dataset.typ;
+          const kats = btn.dataset.typ==='einnahme' ? EINNAHMEN_KAT : AUSGABEN_KAT;
+          katSel.innerHTML = kats.map(k=>`<option value="${k.id}">${k.icon} ${k.label}</option>`).join('');
+        };
+      });
+
+      document.getElementById('btnCancelBuchung').onclick = ()=>{ document.getElementById('buchungModal').style.display='none'; };
+      document.getElementById('buchungModal').onclick = e=>{ if(e.target===document.getElementById('buchungModal')) document.getElementById('buchungModal').style.display='none'; };
+
+      document.getElementById('buchungForm').onsubmit = async e=>{
+        e.preventDefault();
+        const btn = document.getElementById('btnSaveBuchung');
+        btn.disabled=true; btn.textContent='…';
+        const fd = new FormData(e.target);
+        const typ = fd.get('typ');
+        const katId = fd.get('kategorie');
+        const kats = typ==='einnahme' ? EINNAHMEN_KAT : AUSGABEN_KAT;
+        const katObj = kats.find(k=>k.id===katId);
+        await addDoc(collection(db,'buchungen'), {
+          typ, datum: fd.get('datum'),
+          betrag: parseFloat(fd.get('betrag')),
+          kategorie: katId,
+          kategorieLabel: katObj?.label || katId,
+          notiz: fd.get('notiz'),
+          wohnungId: state.wohnungId,
+          userId: state.user.uid,
+          createdAt: serverTimestamp()
+        });
+        document.getElementById('buchungModal').style.display='none';
+        e.target.reset();
+        btn.disabled=false; btn.textContent='Speichern';
+      };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // NEBENKOSTEN
+    // ══════════════════════════════════════════════════════
+    function renderNebenkosten() {
+      const w = getWohnung();
+      if (state.buchungenLoading || state.mieterLoading) return loadingWithNav('nebenkosten');
+      const waehrung = w?.waehrung||'EUR';
+      const jahr = state._nkJahr || (new Date().getFullYear()-1);
+
+      const jb = state.buchungen.filter(b=>b.datum?.startsWith(String(jahr)));
+
+      const betrKVKosten = AUSGABEN_KAT.filter(k=>k.betrKV).map(kat=>{
+        const summe = jb.filter(b=>b.typ==='ausgabe'&&b.kategorie===kat.id).reduce((a,b)=>a+(b.betrag||0),0);
+        return {...kat,summe};
+      }).filter(k=>k.summe>0);
+      const gesamtKosten = betrKVKosten.reduce((a,k)=>a+k.summe,0);
+
+      const vzBuchungen = jb.filter(b=>b.typ==='einnahme'&&b.kategorie==='nebenkosten_vz').reduce((a,b)=>a+(b.betrag||0),0);
+      const vzMieter = state.mieter?.vorauszahlung ? Number(state.mieter.vorauszahlung)*12 : 0;
+      const effVZ = vzBuchungen>0 ? vzBuchungen : vzMieter;
+      const saldo = effVZ - gesamtKosten;
+
+      return `
+      <div class="page">
+        <header class="page-header">
+          <div>
+            <button class="back-btn" id="btnBack">‹ Dashboard</button>
+            <h1>Nebenkostenabrechnung</h1>
+          </div>
+          <select class="year-select" id="nkJahrSel">
+            ${[new Date().getFullYear(), ...yearRange().slice(1)].map(y=>`<option value="${y}" ${y===jahr?'selected':''}>${y}</option>`).join('')}
+          </select>
+        </header>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>👤 Mieterdaten</h3>
+            <button class="btn-link" id="btnEditMieter">${state.mieter?'Bearbeiten':'+ Hinzufügen'}</button>
+          </div>
+          ${state.mieter
+            ? `<div class="mieter-info">
+                <div><strong>Name:</strong> ${esc(state.mieter.name)}</div>
+                ${state.mieter.einzug?`<div><strong>Einzug:</strong> ${esc(state.mieter.einzug)}</div>`:''}
+                ${state.mieter.vorauszahlung?`<div><strong>Monatl. Vorauszahlung:</strong> ${fmt(state.mieter.vorauszahlung,waehrung)}</div>`:''}
+               </div>`
+            : `<p class="empty-state">Keine Mieterdaten hinterlegt.</p>`}
+        </div>
+
+        <div class="card">
+          <h3>📋 Umlagefähige Kosten ${jahr}</h3>
+          <p class="card-sub">Gemäß § 2 BetrKV — basierend auf deinen Buchungen</p>
+          ${betrKVKosten.length===0
+            ? `<p class="empty-state">Noch keine umlagefähigen Ausgaben im Jahr ${jahr} erfasst. <button class="btn-link" id="btnToBuchungen">Buchungen erfassen ›</button></p>`
+            : `<div class="nk-tabelle">
+                ${betrKVKosten.map(k=>`
+                  <div class="nk-row">
+                    <span class="nk-icon">${k.icon}</span>
+                    <span class="nk-label">${esc(k.label)}</span>
+                    <span class="nk-betrag">${fmt(k.summe,waehrung)}</span>
+                  </div>`).join('')}
+                <div class="nk-total">
+                  <span>Gesamtkosten</span>
+                  <span>${fmt(gesamtKosten,waehrung)}</span>
+                </div>
+               </div>`}
+        </div>
+
+        <div class="card">
+          <h3>⚖️ Abrechnung ${jahr}</h3>
+          <div class="abrechnung-box">
+            <div class="abr-row"><span>Gesamtkosten</span><span>${fmt(gesamtKosten,waehrung)}</span></div>
+            <div class="abr-row">
+              <span>Vorauszahlungen${vzBuchungen>0?' (aus Buchungen)':state.mieter?.vorauszahlung?` (${fmt(state.mieter.vorauszahlung,waehrung)} × 12)`:''}
+              </span>
+              <span>${fmt(effVZ,waehrung)}</span>
+            </div>
+            <div class="abr-row abr-saldo ${saldo>=0?'positiv':'negativ'}">
+              <strong>${saldo>=0?'✓ Guthaben Mieter':'⚠ Nachzahlung Mieter'}</strong>
+              <strong>${fmt(Math.abs(saldo),waehrung)}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📄 PDF erstellen</h3>
+          <p class="card-sub">Professionelle Abrechnung zum Versand an den Mieter</p>
+          <button class="btn-primary btn-full" id="btnNkPDF" ${betrKVKosten.length===0?'disabled':''}>
+            Nebenkostenabrechnung ${jahr} als PDF
+          </button>
+          ${betrKVKosten.length===0?`<p class="hint">⚠ Erfasse zuerst umlagefähige Ausgaben im Bereich Buchungen.</p>`:''}
+        </div>
+
+        ${bottomNav('nebenkosten')}
+      </div>
+
+      <!-- Mieter Modal -->
+      <div class="modal-overlay" id="mieterModal" style="display:none">
+        <div class="modal">
+          <h2>Mieterdaten</h2>
+          <form id="mieterForm">
+            <div class="field"><label>Name Mieter *</label>
+              <input name="name" value="${esc(state.mieter?.name||'')}" placeholder="Max Mustermann" required /></div>
+            <div class="field"><label>Einzugsdatum</label>
+              <input type="date" name="einzug" value="${esc(state.mieter?.einzug||'')}" /></div>
+            <div class="field"><label>Monatl. Nebenkostenvorauszahlung (${waehrung})</label>
+              <input type="number" name="vorauszahlung" step="0.01" value="${esc(state.mieter?.vorauszahlung||'')}" placeholder="150.00" /></div>
+            <div class="modal-actions">
+              <button type="button" class="btn-ghost" id="btnCancelMieter">Abbrechen</button>
+              <button type="submit" class="btn-primary" id="btnSaveMieter">Speichern</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    function attachNebenkosten() {
+      document.getElementById('btnBack').onclick = ()=>navigate('dashboard');
+      attachBottomNav();
+      document.getElementById('nkJahrSel').onchange = e=>{ state._nkJahr=Number(e.target.value); render(); };
+      document.getElementById('btnToBuchungen')?.onclick = ()=>navigate('buchungen');
+
+      document.getElementById('btnEditMieter').onclick = ()=>{
+        document.getElementById('mieterModal').style.display='flex';
+      };
+      document.getElementById('btnCancelMieter').onclick = ()=>{
+        document.getElementById('mieterModal').style.display='none';
+      };
+      document.getElementById('mieterModal').onclick = e=>{
+        if(e.target===document.getElementById('mieterModal')) document.getElementById('mieterModal').style.display='none';
+      };
+      document.getElementById('mieterForm').onsubmit = async e=>{
+        e.preventDefault();
+        const btn = document.getElementById('btnSaveMieter');
+        btn.disabled=true; btn.textContent='…';
+        const fd = new FormData(e.target);
+        const data = { name:fd.get('name'), einzug:fd.get('einzug'), vorauszahlung:fd.get('vorauszahlung') };
+        if (state.mieter) {
+          await updateDoc(doc(db,'mieter',state.mieter.id), data);
+        } else {
+          await addDoc(collection(db,'mieter'), {...data, userId:state.user.uid, wohnungId:state.wohnungId, createdAt:serverTimestamp()});
+        }
+        document.getElementById('mieterModal').style.display='none';
+        btn.disabled=false; btn.textContent='Speichern';
+      };
+
+      document.getElementById('btnNkPDF')?.onclick = ()=>{
+        const w = getWohnung();
+        const jahr = state._nkJahr || (new Date().getFullYear()-1);
+        exportNebenkostenPDF(w, state.mieter, state.buchungen, jahr);
+      };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // EXPORT
+    // ══════════════════════════════════════════════════════
+    function renderExport() {
+      const w = getWohnung();
+      if (state.buchungenLoading) return loadingWithNav('export');
+      const waehrung = w?.waehrung||'EUR';
+      const jahr = state._expJahr || (new Date().getFullYear()-1);
+      const land = state._expLand || 'de_bw';
+      const zielWaehrung = state._expZielW || 'EUR';
+
+      const jb = state.buchungen.filter(b=>b.datum?.startsWith(String(jahr)));
+      const sumEin = jb.filter(b=>b.typ==='einnahme').reduce((a,b)=>a+(b.betrag||0),0);
+      const sumAus = jb.filter(b=>b.typ==='ausgabe').reduce((a,b)=>a+(b.betrag||0),0);
+      const brauchtKurs = waehrung && waehrung!==zielWaehrung;
+
+      return `
+      <div class="page">
+        <header class="page-header">
+          <div>
+            <button class="back-btn" id="btnBack">‹ Dashboard</button>
+            <h1>Export</h1>
+          </div>
+          <select class="year-select" id="expJahrSel">
+            ${[new Date().getFullYear(),...yearRange().slice(1)].map(y=>`<option value="${y}" ${y===jahr?'selected':''}>${y}</option>`).join('')}
+          </select>
+        </header>
+
+        <div class="card">
+          <h3>📊 Übersicht ${jahr}</h3>
+          <div class="export-overview">
+            <div class="exp-stat"><span>Buchungen</span><strong>${jb.length}</strong></div>
+            <div class="exp-stat"><span>Einnahmen</span><strong class="ein">${fmt(sumEin,waehrung)}</strong></div>
+            <div class="exp-stat"><span>Ausgaben</span><strong class="aus">${fmt(sumAus,waehrung)}</strong></div>
+            <div class="exp-stat"><span>Saldo</span><strong class="${sumEin-sumAus>=0?'ein':'aus'}">${fmt(sumEin-sumAus,waehrung)}</strong></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>🧾 Steuererklärung PDF</h3>
+          <p class="card-sub">Alle Einnahmen & Ausgaben mit Steuerhinweisen</p>
+          <div class="field"><label>Steuerpflicht in</label>
+            <select id="expLandSel">
+              ${STEUER_LAENDER.map(l=>`<option value="${l.id}" ${l.id===land?'selected':''}>${l.label}</option>`).join('')}
+            </select></div>
+          <div class="field"><label>Ausgabe-Währung</label>
+            <select id="expZielWSel">
+              ${WAEHRUNGEN.map(w=>`<option value="${w.code}" ${w.code===zielWaehrung?'selected':''}>${w.code}</option>`).join('')}
+            </select></div>
+          ${brauchtKurs?`
+            <div class="field"><label>Wechselkurs: 1 ${waehrung} = ? ${zielWaehrung}</label>
+              <input type="number" id="expKurs" step="0.0001" value="${state._expKurs||1}" placeholder="z.B. 0.95" />
+              <small class="field-hint">Jahresdurchschnittskurs empfohlen</small></div>`:''}
+          <button class="btn-primary btn-full" id="btnSteuerPDF" ${jb.length===0?'disabled':''}>
+            Steuer-PDF ${jahr} erstellen
+          </button>
+          ${jb.length===0?`<p class="hint">⚠ Keine Buchungen im Jahr ${jahr}.</p>`:''}
+        </div>
+
+        <div class="card">
+          <h3>📊 CSV Export</h3>
+          <p class="card-sub">Alle Buchungen als CSV — öffenbar in Excel oder Numbers</p>
+          <button class="btn-secondary btn-full" id="btnCSV" ${jb.length===0?'disabled':''}>
+            CSV herunterladen (${jb.length} Buchungen)
+          </button>
+        </div>
+
+        <div class="card">
+          <h3>💡 Steuerhinweise</h3>
+          <div class="steuer-hint-box">
+            <div class="hint-section">
+              <strong>🇩🇪 Deutschland</strong>
+              <ul>
+                <li>Anlage V – Vermietung & Verpachtung</li>
+                <li>Mieteinnahmen sind steuerpflichtig</li>
+                <li>Werbungskosten mindern das Einkommen</li>
+                <li>AfA auf Gebäude prüfen (2% pro Jahr)</li>
+              </ul>
+            </div>
+            <div class="hint-section">
+              <strong>🇨🇭 Schweiz</strong>
+              <ul>
+                <li>Auslandsimmobilie in Steuererklärung deklarieren</li>
+                <li>DBA DE–CH: Deutschland besteuert, CH rechnet an</li>
+                <li>Liegenschaftsunterhalt: Pauschale oder effektiv</li>
+                <li>Hypozinsen als Schuldzinsen abziehbar</li>
+              </ul>
+            </div>
+          </div>
+          <p class="disclaimer">⚠ Dies ist keine Steuerberatung. Bitte konsultiere einen Steuerberater.</p>
+        </div>
+
+        ${bottomNav('export')}
+      </div>`;
+    }
+
+    function attachExport() {
+      const w = getWohnung();
+      document.getElementById('btnBack').onclick = ()=>navigate('dashboard');
+      attachBottomNav();
+      document.getElementById('expJahrSel').onchange = e=>{ state._expJahr=Number(e.target.value); render(); };
+      document.getElementById('expLandSel').onchange = e=>{ state._expLand=e.target.value; render(); };
+      document.getElementById('expZielWSel').onchange = e=>{ state._expZielW=e.target.value; render(); };
+      document.getElementById('expKurs')?.addEventListener('change', e=>{ state._expKurs=parseFloat(e.target.value); });
+
+      document.getElementById('btnSteuerPDF')?.onclick = ()=>{
+        const jahr = state._expJahr || (new Date().getFullYear()-1);
+        const land  = state._expLand || 'de_bw';
+        const zielW = state._expZielW || 'EUR';
+        const kurs  = state._expKurs || 1;
+        exportSteuerPDF(w, state.buchungen, jahr, land, kurs, zielW);
+      };
+      document.getElementById('btnCSV')?.onclick = ()=>{
+        const jahr = state._expJahr || (new Date().getFullYear()-1);
+        exportCSV(state.buchungen, jahr, w);
+      };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // BOTTOM NAV + HELPERS
+    // ══════════════════════════════════════════════════════
+    function bottomNav(active) {
+      const items = [
+        { id:'dashboard',   icon:'📊', label:'Dashboard'  },
+        { id:'buchungen',   icon:'📋', label:'Buchungen'  },
+        { id:'nebenkosten', icon:'💧', label:'Nebenkosten'},
+        { id:'export',      icon:'📄', label:'Export'     },
+      ];
+      return `<div class="bottom-nav">
+        ${items.map(i=>`<button class="nav-btn ${active===i.id?'active':''}" data-page="${i.id}">${i.icon}<span>${i.label}</span></button>`).join('')}
+      </div>`;
+    }
+
+    function attachBottomNav() {
+      document.querySelectorAll('.nav-btn[data-page]').forEach(btn=>{
+        btn.onclick = ()=>navigate(btn.dataset.page);
+      });
+    }
+
+    function loadingWithNav(active) {
+      return `<div class="page"><div class="loading-inner"><div class="spinner"></div></div>${bottomNav(active)}</div>`;
+    }
+
+    // ══════════════════════════════════════════════════════
+    // PDF EXPORT (inline, no jsPDF CDN needed here — use simple print approach)
+    // We load jsPDF dynamically only when needed
+    // ══════════════════════════════════════════════════════
+    function fmtPDF(n, waehrung) {
+      const sym = waehrung==='CHF'?'CHF ':'€';
+      return `${sym}${Number(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    }
+
+    async function loadJsPDF() {
+      if (window.jspdf) return;
+      await new Promise((res,rej)=>{
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      await new Promise((res,rej)=>{
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+
+    async function exportNebenkostenPDF(wohnung, mieter, buchungen, jahr) {
+      const btn = document.getElementById('btnNkPDF');
+      if(btn){ btn.disabled=true; btn.textContent='PDF wird erstellt…'; }
+      await loadJsPDF();
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const NAVY = [26,39,68];
+
+      // Header
+      doc.setFillColor(...NAVY);
+      doc.rect(0,0,210,28,'F');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(16); doc.setFont('helvetica','bold');
+      doc.text('Nebenkostenabrechnung', 14, 12);
+      doc.setFontSize(9); doc.setFont('helvetica','normal');
+      doc.text(`Abrechnungszeitraum: 01.01.${jahr} – 31.12.${jahr}`, 14, 20);
+      doc.setTextColor(0,0,0);
+
+      let y = 36;
+      doc.setFontSize(10); doc.setFont('helvetica','bold');
+      doc.text('Vermieter', 14, y); doc.text('Mieter', 110, y);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      [wohnung?.vermieterName||'–', wohnung?.vermieterAdresse||'–'].forEach((l,i)=>doc.text(l,14,y+6+i*5));
+      [mieter?.name||'–', wohnung?.adresse||'–'].forEach((l,i)=>doc.text(l,110,y+6+i*5));
+      y += 26;
+
+      const jb = buchungen.filter(b=>b.datum?.startsWith(String(jahr)));
+      const rows = [];
+      let gesamtKosten = 0;
+      AUSGABEN_KAT.filter(k=>k.betrKV).forEach(kat=>{
+        const summe = jb.filter(b=>b.typ==='ausgabe'&&b.kategorie===kat.id).reduce((a,b)=>a+(b.betrag||0),0);
+        if(summe>0){ rows.push([`§2 Nr.${kat.betrKVNr} BetrKV`, kat.label, fmtPDF(summe,wohnung?.waehrung)]); gesamtKosten+=summe; }
+      });
+
+      doc.autoTable({ startY:y, head:[['Rechtsgrundlage','Kostenart','Betrag']], body:rows,
+        foot:[['','Gesamtkosten',fmtPDF(gesamtKosten,wohnung?.waehrung)]],
+        headStyles:{fillColor:NAVY,textColor:255,fontSize:9},
+        footStyles:{fillColor:[220,230,245],fontStyle:'bold'},
+        styles:{fontSize:9}, columnStyles:{2:{halign:'right'}} });
+
+      y = doc.lastAutoTable.finalY + 10;
+      const vzBuchungen = jb.filter(b=>b.typ==='einnahme'&&b.kategorie==='nebenkosten_vz').reduce((a,b)=>a+(b.betrag||0),0);
+      const vzMieter = mieter?.vorauszahlung ? Number(mieter.vorauszahlung)*12 : 0;
+      const effVZ = vzBuchungen>0?vzBuchungen:vzMieter;
+      const saldo = effVZ - gesamtKosten;
+
+      doc.autoTable({ startY:y, body:[
+        ['Gesamtkosten Nebenkosten', fmtPDF(gesamtKosten,wohnung?.waehrung)],
+        ['Geleistete Vorauszahlungen', fmtPDF(effVZ,wohnung?.waehrung)],
+        [saldo>=0?'✓ Guthaben Mieter':'⚠ Nachzahlung Mieter', fmtPDF(Math.abs(saldo),wohnung?.waehrung)],
+      ], styles:{fontSize:10}, columnStyles:{1:{halign:'right',fontStyle:'bold'}} });
+
+      y = doc.lastAutoTable.finalY + 16;
+      doc.setDrawColor(180,180,180);
+      doc.line(14,y,80,y); doc.line(120,y,196,y);
+      doc.setFontSize(8); doc.setTextColor(100,100,100);
+      doc.text('Datum / Unterschrift Vermieter',14,y+5);
+      doc.text('Datum / Unterschrift Mieter',120,y+5);
+
+      const dateStr = new Date().toLocaleDateString('de-DE');
+      for(let i=1;i<=doc.internal.getNumberOfPages();i++){
+        doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150);
+        doc.text(`Erstellt am ${dateStr} – Mietwohnungs-Tracker`,14,290);
+        doc.text(`Seite ${i} / ${doc.internal.getNumberOfPages()}`,180,290);
+      }
+      doc.save(`Nebenkostenabrechnung_${jahr}_${(wohnung?.adresse||'Wohnung').replace(/\s/g,'_')}.pdf`);
+      if(btn){ btn.disabled=false; btn.textContent=`Nebenkostenabrechnung ${jahr} als PDF`; }
+    }
+
+    async function exportSteuerPDF(wohnung, buchungen, jahr, land, wechselkurs, zielWaehrung) {
+      const btn = document.getElementById('btnSteuerPDF');
+      if(btn){ btn.disabled=true; btn.textContent='PDF wird erstellt…'; }
+      await loadJsPDF();
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const NAVY = [26,39,68];
+      const landLabel = land==='ch'?'Schweiz':'Deutschland – Baden-Württemberg';
+
+      doc.setFillColor(...NAVY);
+      doc.rect(0,0,210,28,'F');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(16); doc.setFont('helvetica','bold');
+      doc.text(`Steuerübersicht ${jahr}`, 14, 12);
+      doc.setFontSize(9); doc.setFont('helvetica','normal');
+      doc.text(`${landLabel} | ${wohnung?.adresse||'Wohnung'}`, 14, 20);
+      doc.setTextColor(0,0,0);
+
+      const jb = buchungen.filter(b=>b.datum?.startsWith(String(jahr)));
+      const konvert = n => wohnung?.waehrung===zielWaehrung ? n : n*(wechselkurs||1);
+      const einnahmen = jb.filter(b=>b.typ==='einnahme');
+      const ausgaben  = jb.filter(b=>b.typ==='ausgabe');
+      const sumEin = einnahmen.reduce((a,b)=>a+konvert(b.betrag||0),0);
+      const sumAus = ausgaben.reduce((a,b)=>a+konvert(b.betrag||0),0);
+      const ueberschuss = sumEin-sumAus;
+
+      let y = 36;
+      doc.setFillColor(240,244,250); doc.rect(14,y,182,22,'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      doc.text('Zusammenfassung',18,y+7);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text(`Gesamteinnahmen: ${fmtPDF(sumEin,zielWaehrung)}`,18,y+14);
+      doc.text(`Gesamtausgaben: ${fmtPDF(sumAus,zielWaehrung)}`,100,y+14);
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(ueberschuss>=0?0:180, ueberschuss>=0?100:0, 0);
+      doc.text(`Überschuss / Verlust: ${fmtPDF(ueberschuss,zielWaehrung)}`,18,y+20);
+      doc.setTextColor(0,0,0); y+=30;
+
+      if(wohnung?.waehrung!==zielWaehrung){
+        doc.setFontSize(8); doc.setTextColor(100);
+        doc.text(`Wechselkurs: 1 ${wohnung?.waehrung} = ${wechselkurs} ${zielWaehrung}`,14,y);
+        doc.setTextColor(0); y+=8;
+      }
+
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      doc.text('Einnahmen',14,y); y+=4;
+      doc.autoTable({ startY:y,
+        head:[['Datum','Beschreibung','Kategorie',`Betrag (${zielWaehrung})`]],
+        body:einnahmen.map(b=>[b.datum||'–',b.notiz||'–',b.kategorieLabel||b.kategorie,fmtPDF(konvert(b.betrag||0),zielWaehrung)]),
+        foot:[['','','Summe Einnahmen',fmtPDF(sumEin,zielWaehrung)]],
+        headStyles:{fillColor:[26,120,80],textColor:255,fontSize:8},
+        footStyles:{fillColor:[220,245,230],fontStyle:'bold'},
+        styles:{fontSize:8}, columnStyles:{3:{halign:'right'}} });
+
+      y=doc.lastAutoTable.finalY+10;
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      doc.text('Ausgaben (Werbungskosten)',14,y); y+=4;
+      doc.autoTable({ startY:y,
+        head:[['Datum','Beschreibung','Kategorie',`Betrag (${zielWaehrung})`]],
+        body:ausgaben.map(b=>[b.datum||'–',b.notiz||'–',b.kategorieLabel||b.kategorie,fmtPDF(konvert(b.betrag||0),zielWaehrung)]),
+        foot:[['','','Summe Ausgaben',fmtPDF(sumAus,zielWaehrung)]],
+        headStyles:{fillColor:NAVY,textColor:255,fontSize:8},
+        footStyles:{fillColor:[220,230,245],fontStyle:'bold'},
+        styles:{fontSize:8}, columnStyles:{3:{halign:'right'}} });
+
+      doc.addPage();
+      doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text('Hinweise für die Steuererklärung',14,20);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      const hinweise = land==='de_bw' ? [
+        '• Anlage V – Vermietung & Verpachtung ausfüllen',
+        '• Mieteinnahmen in Zeile 9 ff. eintragen',
+        '• Werbungskosten in Zeile 33 ff. (Zinsen, AfA, Verwaltung etc.)',
+        '• Lineare AfA auf Anschaffungskosten prüfen (2% pro Jahr)',
+        '• Bei ausländischen Einkünften: Anlage AUS prüfen (DBA CH-DE)',
+      ] : [
+        '• Liegenschaft im Ausland in Steuererklärung deklarieren',
+        '• Mieteinnahmen als Einkommen aus unbeweglichem Vermögen',
+        '• DBA DE–CH: Deutschland besteuert, CH rechnet an',
+        '• Liegenschaftsunterhalt: Pauschale oder effektive Methode',
+        '• Hypozinsen als Schuldzinsen abziehbar',
+      ];
+      hinweise.forEach((h,i)=>doc.text(h,14,34+i*8));
+
+      const dateStr = new Date().toLocaleDateString('de-DE');
+      for(let i=1;i<=doc.internal.getNumberOfPages();i++){
+        doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150);
+        doc.text(`Erstellt am ${dateStr} – Mietwohnungs-Tracker`,14,290);
+        doc.text(`Seite ${i} / ${doc.internal.getNumberOfPages()}`,180,290);
+      }
+      doc.save(`Steuer_${jahr}_${land}_${(wohnung?.adresse||'Wohnung').replace(/\s/g,'_')}.pdf`);
+      if(btn){ btn.disabled=false; btn.textContent=`Steuer-PDF ${jahr} erstellen`; }
+    }
+
+    function exportCSV(buchungen, jahr, wohnung) {
+      const jb = buchungen.filter(b=>b.datum?.startsWith(String(jahr)));
+      const header = ['Datum','Typ','Kategorie','Betrag','Währung','Notiz'];
+      const rows = jb.map(b=>[
+        b.datum||'', b.typ==='einnahme'?'Einnahme':'Ausgabe',
+        b.kategorieLabel||b.kategorie||'',
+        (b.betrag||0).toFixed(2), wohnung?.waehrung||'EUR',
+        `"${(b.notiz||'').replace(/"/g,'""')}"`
+      ]);
+      const csv = [header,...rows].map(r=>r.join(';')).join('\n');
+      const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href=url; a.download=`Buchungen_${jahr}_${(wohnung?.adresse||'Wohnung').replace(/\s/g,'_')}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+    }
+
+    // ── Boot ───────────────────────────────────────────────
+    render();
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:     #1a2744;
+      --navy-md:  #2c3e6b;
+      --blue:     #5b8fb9;
+      --blue-lt:  #e8f0f8;
+      --green:    #2d7d5e;
+      --green-lt: #e6f5ee;
+      --red:      #c0392b;
+      --red-lt:   #fdecea;
+      --gray-1:   #f8f9fb;
+      --gray-2:   #eef0f4;
+      --gray-3:   #d1d5de;
+      --gray-4:   #8b93a5;
+      --gray-5:   #4a5568;
+      --text:     #1a202c;
+      --radius:   12px;
+      --shadow:   0 2px 8px rgba(26,39,68,.10);
+      --shadow-md:0 4px 20px rgba(26,39,68,.14);
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --nav-h: 64px;
+    }
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+    body { font-family: var(--font); background: var(--gray-1); color: var(--text); min-height: 100dvh; -webkit-font-smoothing: antialiased; }
+    button { font-family: var(--font); cursor: pointer; border: none; background: none; }
+    input, select, textarea { font-family: var(--font); font-size: 16px; }
+
+    /* Loading */
+    .loading-screen { display:flex; align-items:center; justify-content:center; min-height:100dvh; }
+    .loading-inner  { display:flex; align-items:center; justify-content:center; flex:1; min-height:200px; }
+    .spinner { width:36px; height:36px; border:3px solid var(--gray-2); border-top-color:var(--navy); border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Login */
+    .login-bg { min-height:100dvh; display:flex; align-items:center; justify-content:center; background:linear-gradient(145deg,var(--navy) 0%,var(--navy-md) 100%); padding:24px; }
+    .login-card { background:#fff; border-radius:20px; padding:40px 32px; width:100%; max-width:380px; box-shadow:var(--shadow-md); text-align:center; }
+    .login-icon { font-size:48px; margin-bottom:12px; }
+    .login-title { font-size:22px; font-weight:700; color:var(--navy); }
+    .login-sub { font-size:13px; color:var(--gray-4); margin-top:4px; margin-bottom:28px; }
+    .login-form { text-align:left; }
+    .login-switch { margin-top:16px; font-size:13px; color:var(--blue); text-decoration:underline; cursor:pointer; }
+
+    /* Page */
+    .page { max-width:600px; margin:0 auto; padding:0 0 calc(var(--nav-h) + 16px); min-height:100dvh; display:flex; flex-direction:column; }
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; padding:20px 16px 12px; position:sticky; top:0; z-index:10; background:var(--gray-1); }
+    .page-header h1 { font-size:22px; font-weight:700; color:var(--navy); line-height:1.2; }
+    .header-sub { font-size:12px; color:var(--gray-4); margin-top:2px; }
+    .back-btn { font-size:12px; color:var(--blue); margin-bottom:4px; display:block; }
+
+    /* Cards */
+    .card { background:#fff; border-radius:var(--radius); padding:16px; margin:0 16px 12px; box-shadow:var(--shadow); }
+    .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .card-header h3 { margin:0; }
+    .card h3 { font-size:15px; font-weight:600; color:var(--navy); margin-bottom:10px; }
+    .card-sub { font-size:12px; color:var(--gray-4); margin:-6px 0 12px; }
+
+    /* Buttons */
+    .btn-primary { background:var(--navy); color:#fff; border-radius:10px; padding:12px 20px; font-size:15px; font-weight:600; transition:opacity .15s; }
+    .btn-primary:disabled { opacity:.5; }
+    .btn-primary:active { opacity:.8; }
+    .btn-secondary { background:var(--blue-lt); color:var(--navy); border-radius:10px; padding:12px 20px; font-size:15px; font-weight:600; }
+    .btn-secondary:disabled { opacity:.5; }
+    .btn-ghost { font-size:14px; color:var(--gray-5); padding:8px 12px; border-radius:8px; }
+    .btn-link { font-size:13px; color:var(--blue); background:none; border:none; cursor:pointer; }
+    .btn-danger { background:var(--red); color:#fff; border-radius:10px; padding:12px 20px; font-size:15px; font-weight:600; }
+    .btn-full { width:100%; text-align:center; }
+    .btn-sm { padding:8px 14px; font-size:14px; }
+
+    /* Fields */
+    .field { margin-bottom:14px; }
+    .field label { display:block; font-size:13px; color:var(--gray-5); font-weight:500; margin-bottom:5px; }
+    .field input, .field select { width:100%; padding:11px 14px; border:1.5px solid var(--gray-3); border-radius:9px; font-size:15px; color:var(--text); background:#fff; }
+    .field input:focus, .field select:focus { outline:none; border-color:var(--blue); }
+    .field small, .field-hint { font-size:11px; color:var(--gray-4); margin-top:4px; display:block; }
+    .error-msg { background:var(--red-lt); color:var(--red); border-radius:8px; padding:10px 14px; font-size:13px; margin-bottom:12px; }
+
+    /* Wohnungen */
+    .wohnungen-grid { padding:0 16px; display:flex; flex-direction:column; gap:10px; }
+    .wohnung-card { display:flex; align-items:center; gap:14px; background:#fff; border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); cursor:pointer; transition:transform .1s; }
+    .wohnung-card:active { transform:scale(.98); }
+    .wohnung-icon { font-size:28px; }
+    .wohnung-info { flex:1; }
+    .wohnung-info strong { font-size:15px; font-weight:600; display:block; }
+    .wohnung-info small { font-size:12px; color:var(--gray-4); }
+    .badge { display:inline-block; background:var(--blue-lt); color:var(--navy); border-radius:5px; padding:2px 7px; font-size:11px; font-weight:600; margin-top:3px; }
+    .arrow { font-size:22px; color:var(--gray-3); }
+    .wohnung-add-btn { display:flex; align-items:center; gap:12px; background:#fff; border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); border:1.5px dashed var(--gray-3); cursor:pointer; color:var(--gray-4); font-size:15px; }
+    .add-plus { font-size:22px; color:var(--blue); }
+
+    /* KPI */
+    .kpi-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:0 16px 12px; }
+    .kpi-card { background:#fff; border-radius:var(--radius); padding:12px; text-align:center; box-shadow:var(--shadow); }
+    .kpi-label { font-size:10px; color:var(--gray-4); margin-bottom:4px; }
+    .kpi-value { font-size:15px; font-weight:700; }
+    .kpi-ein .kpi-value { color:var(--green); }
+    .kpi-aus .kpi-value { color:var(--red); }
+    .kpi-pos .kpi-value { color:var(--green); }
+    .kpi-neg .kpi-value { color:var(--red); }
+
+    /* Bar chart */
+    .bar-chart { display:flex; gap:3px; align-items:flex-end; height:110px; padding-bottom:20px; position:relative; overflow-x:auto; }
+    .bar-col { display:flex; flex-direction:column; align-items:center; flex:1; min-width:18px; }
+    .bar-group { display:flex; gap:2px; align-items:flex-end; height:80px; }
+    .bar { width:7px; border-radius:3px 3px 0 0; min-height:2px; transition:height .3s; }
+    .bar-ein { background:var(--green); }
+    .bar-aus { background:var(--red); }
+    .bar-label { font-size:8px; color:var(--gray-4); margin-top:4px; }
+    .chart-legend { font-size:11px; color:var(--gray-4); margin-top:8px; display:flex; align-items:center; gap:4px; }
+    .legend-dot { display:inline-block; width:10px; height:10px; border-radius:2px; }
+
+    /* Top Ausgaben */
+    .top-item { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .top-label { font-size:12px; width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .top-bar-wrap { flex:1; background:var(--gray-2); border-radius:3px; height:6px; }
+    .top-bar { background:var(--red); height:6px; border-radius:3px; }
+    .top-value { font-size:12px; font-weight:600; width:80px; text-align:right; }
+
+    /* Buchung rows (dashboard) */
+    .buchung-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--gray-2); }
+    .buchung-row:last-child { border-bottom:none; }
+    .buchung-left { display:flex; align-items:center; gap:10px; }
+    .typ-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .typ-dot.einnahme { background:var(--green); }
+    .typ-dot.ausgabe  { background:var(--red); }
+    .buchung-notiz { font-size:13px; font-weight:500; }
+    .buchung-datum { font-size:11px; color:var(--gray-4); }
+    .buchung-betrag { font-size:14px; font-weight:600; }
+    .buchung-betrag.einnahme { color:var(--green); }
+    .buchung-betrag.ausgabe  { color:var(--red); }
+
+    /* Filter row */
+    .filter-row { padding:0 16px 10px; display:flex; flex-direction:column; gap:8px; }
+    .seg-ctrl { display:flex; background:var(--gray-2); border-radius:9px; padding:3px; }
+    .seg-btn { flex:1; padding:7px; font-size:13px; font-weight:500; border-radius:7px; color:var(--gray-5); transition:all .15s; }
+    .seg-btn.active { background:#fff; color:var(--navy); box-shadow:var(--shadow); }
+    .filter-selects { display:flex; gap:8px; }
+    .filter-selects select { flex:1; padding:8px 10px; border:1.5px solid var(--gray-3); border-radius:8px; font-size:13px; }
+    .mb { margin-bottom:14px; }
+
+    /* Mini saldo */
+    .mini-saldo { margin:0 16px 10px; background:#fff; border-radius:var(--radius); padding:10px 16px; box-shadow:var(--shadow); display:flex; gap:8px; align-items:center; font-size:13px; font-weight:600; flex-wrap:wrap; }
+    .ein-sum { color:var(--green); }
+    .aus-sum { color:var(--red); }
+    .saldo-sum.pos { color:var(--green); }
+    .saldo-sum.neg { color:var(--red); }
+    .divider { color:var(--gray-3); }
+
+    /* Buchungen full list */
+    .buchungen-full-list { padding:0 16px; display:flex; flex-direction:column; gap:8px; }
+    .buchung-item { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); display:flex; overflow:hidden; }
+    .buchung-typ-bar { width:4px; flex-shrink:0; }
+    .buchung-typ-bar.einnahme { background:var(--green); }
+    .buchung-typ-bar.ausgabe  { background:var(--red); }
+    .buchung-content { flex:1; padding:12px; }
+    .buchung-main { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px; }
+    .buchung-kat { font-size:14px; font-weight:600; }
+    .buchung-betrag-lg { font-size:15px; font-weight:700; }
+    .buchung-betrag-lg.einnahme { color:var(--green); }
+    .buchung-betrag-lg.ausgabe  { color:var(--red); }
+    .buchung-notiz-text { font-size:12px; color:var(--gray-5); margin-bottom:4px; }
+    .buchung-meta { display:flex; justify-content:space-between; align-items:center; }
+    .buchung-meta span { font-size:11px; color:var(--gray-4); }
+    .delete-btn { font-size:14px; color:var(--gray-4); padding:2px 6px; }
+    .empty-state { font-size:13px; color:var(--gray-4); }
+    .empty-state-big { text-align:center; padding:40px 20px; color:var(--gray-4); font-size:14px; display:flex; flex-direction:column; gap:12px; align-items:center; }
+    .empty-state-big div { font-size:36px; }
+
+    /* Nebenkosten */
+    .mieter-info { font-size:14px; display:flex; flex-direction:column; gap:6px; }
+    .nk-tabelle { display:flex; flex-direction:column; gap:0; }
+    .nk-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--gray-2); }
+    .nk-icon { font-size:16px; width:24px; }
+    .nk-label { flex:1; font-size:13px; }
+    .nk-betrag { font-size:13px; font-weight:600; }
+    .nk-total { display:flex; justify-content:space-between; padding:10px 0 0; font-weight:700; font-size:14px; }
+    .abrechnung-box { display:flex; flex-direction:column; gap:0; }
+    .abr-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--gray-2); font-size:14px; }
+    .abr-row:last-child { border-bottom:none; }
+    .abr-saldo { padding-top:12px; }
+    .abr-saldo.positiv strong { color:var(--green); }
+    .abr-saldo.negativ strong { color:var(--red); }
+    .hint { font-size:12px; color:var(--red); margin-top:8px; }
+
+    /* Export */
+    .export-overview { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+    .exp-stat { background:var(--gray-1); border-radius:8px; padding:10px; }
+    .exp-stat span { font-size:11px; color:var(--gray-4); display:block; }
+    .exp-stat strong { font-size:14px; display:block; margin-top:3px; }
+    .exp-stat strong.ein { color:var(--green); }
+    .exp-stat strong.aus { color:var(--red); }
+    .steuer-hint-box { display:flex; flex-direction:column; gap:14px; margin-bottom:12px; }
+    .hint-section strong { font-size:13px; display:block; margin-bottom:6px; }
+    .hint-section ul { padding-left:16px; display:flex; flex-direction:column; gap:4px; }
+    .hint-section li { font-size:12px; color:var(--gray-5); }
+    .disclaimer { font-size:11px; color:var(--gray-4); }
+
+    /* Year select */
+    .year-select { padding:7px 10px; border:1.5px solid var(--gray-3); border-radius:8px; font-size:13px; background:#fff; }
+
+    /* Bottom nav */
+    .bottom-nav { position:fixed; bottom:0; left:0; right:0; height:var(--nav-h); background:#fff; border-top:1px solid var(--gray-2); display:flex; z-index:100; max-width:600px; margin:0 auto; }
+    .nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:18px; color:var(--gray-4); padding-bottom:env(safe-area-inset-bottom,0); }
+    .nav-btn span { font-size:10px; font-weight:500; }
+    .nav-btn.active { color:var(--navy); }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; z-index:200; padding:0; }
+    .modal { background:#fff; border-radius:20px 20px 0 0; padding:24px 20px calc(24px + env(safe-area-inset-bottom,0)); width:100%; max-width:600px; max-height:90dvh; overflow-y:auto; }
+    .modal h2 { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:16px; }
+    .modal h3 { font-size:16px; font-weight:600; color:var(--navy); margin-bottom:8px; }
+    .modal p  { font-size:14px; color:var(--gray-5); margin-bottom:16px; }
+    .modal-sm { padding:24px 20px; border-radius:16px; margin:auto; max-width:340px; }
+    .modal-actions { display:flex; gap:10px; margin-top:20px; }
+    .modal-actions .btn-ghost { flex:1; text-align:center; }
+    .modal-actions .btn-primary, .modal-actions .btn-danger { flex:2; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+</body>
 </html>
