@@ -1,17 +1,912 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#2D5A3D" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Wohnung" />
-    <title>Mietwohnungs-Tracker</title>
-    <link rel="icon" type="image/svg+xml" href="/Wohnung/favicon.svg" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2D5A3D" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Wohnung" />
+  <title>Mietwohnungs-Tracker</title>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getFirestore, collection, addDoc, getDocs, query, where, orderBy, deleteDoc, doc, updateDoc, getDoc, setDoc }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+
+    // ── FIREBASE CONFIG ──────────────────────────────────────────────────────
+    // Trage hier deine Firebase-Werte ein (aus der Firebase Console)
+    const firebaseConfig = {
+      apiKey:            "DEIN_API_KEY",
+      authDomain:        "wohnung-7fe03.firebaseapp.com",
+      projectId:         "wohnung-7fe03",
+      storageBucket:     "wohnung-7fe03.firebasestorage.app",
+      messagingSenderId: "DEINE_SENDER_ID",
+      appId:             "DEINE_APP_ID"
+    };
+    // ────────────────────────────────────────────────────────────────────────
+
+    const app  = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+    const storage = getStorage(app);
+
+    // Expose globally so inline handlers can reach them
+    window._fb = { auth, db, storage, signInWithEmailAndPassword, signOut,
+      onAuthStateChanged, collection, addDoc, getDocs, query, where, orderBy,
+      deleteDoc, doc, updateDoc, getDoc, setDoc, ref, uploadBytes, getDownloadURL, deleteObject };
+
+    // Boot the app once Firebase is ready
+    window.addEventListener('DOMContentLoaded', () => window._boot());
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #F7F6F4;
+      --surface:     #FFFFFF;
+      --border:      #E2E0DC;
+      --text:        #1A1814;
+      --muted:       #7A7670;
+      --accent:      #2D5A3D;
+      --accent-l:    #E8F0EA;
+      --danger:      #C0392B;
+      --danger-l:    #FDECEA;
+      --income:      #1A5C2A;
+      --expense:     #8B2315;
+      --r:           10px;
+      --sh:          0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+      --f:           -apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;
+    }
+
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: var(--f);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LAYOUT ── */
+    #app { display: flex; flex-direction: column; min-height: 100dvh; }
+
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(247,246,244,.93);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: .875rem 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .topbar-title { font-size: 1rem; font-weight: 600; }
+
+    .page {
+      flex: 1;
+      padding: 1.25rem 1rem 6.5rem;
+      max-width: 480px; margin: 0 auto; width: 100%;
+    }
+
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(247,246,244,.96);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .nav-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: .25rem; padding: .625rem .5rem;
+      font-size: .6875rem; font-weight: 500; color: var(--muted);
+      border: none; background: none; cursor: pointer;
+      -webkit-tap-highlight-color: transparent; transition: color .15s;
+      font-family: var(--f);
+    }
+    .nav-btn.active { color: var(--accent); }
+    .nav-btn svg { width: 24px; height: 24px; }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      box-shadow: var(--sh);
+    }
+
+    /* ── FORMS ── */
+    .form-group { display: flex; flex-direction: column; gap: .375rem; }
+    label { font-size: .8125rem; font-weight: 500; color: var(--muted); }
+    input, select, textarea {
+      font-family: var(--f); font-size: 1rem; color: var(--text);
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 8px; padding: .75rem; width: 100%;
+      outline: none; transition: border-color .15s;
+      -webkit-appearance: none; appearance: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent); background: var(--surface);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      font-family: var(--f); font-size: 1rem; font-weight: 600;
+      padding: .8125rem 1.25rem; border-radius: 8px; border: none;
+      cursor: pointer; width: 100%; transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-secondary{ background: var(--border); color: var(--text); }
+    .btn-danger   { background: var(--danger); color: #fff; }
+    .btn-sm {
+      font-family: var(--f); font-size: .8125rem; font-weight: 500;
+      padding: .4rem .75rem; border-radius: 6px; border: none;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+      background: var(--border); color: var(--text);
+    }
+
+    /* ── SEGMENT ── */
+    .segment { display: flex; background: var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+    .seg-btn {
+      flex: 1; padding: .5rem; font-size: .875rem; font-weight: 500;
+      border: none; border-radius: 6px; background: transparent;
+      color: var(--muted); cursor: pointer; transition: all .15s;
+      font-family: var(--f); -webkit-tap-highlight-color: transparent;
+    }
+    .seg-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--sh); font-weight: 600; }
+
+    /* ── UTILS ── */
+    .stack    { display: flex; flex-direction: column; gap: 1rem; }
+    .stack-sm { display: flex; flex-direction: column; gap: .5rem; }
+    .row      { display: flex; align-items: center; gap: .75rem; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; }
+    .divider  { height: 1px; background: var(--border); }
+    .muted    { color: var(--muted); }
+    .text-sm  { font-size: .875rem; }
+    .text-xs  { font-size: .8125rem; }
+    .bold     { font-weight: 600; }
+    .tabular  { font-variant-numeric: tabular-nums; }
+    .income   { color: var(--income); }
+    .expense  { color: var(--expense); }
+    .mt-1 { margin-top: .5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .mt-3 { margin-top: 1.5rem; }
+    .hidden { display: none !important; }
+
+    .error-msg {
+      font-size: .8125rem; color: var(--danger);
+      background: var(--danger-l); border-radius: 6px; padding: .625rem .75rem;
+    }
+    .success-msg {
+      font-size: .8125rem; color: var(--income);
+      background: var(--accent-l); border-radius: 6px; padding: .625rem .75rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin .6s linear infinite; display: inline-block;
+    }
+    .spinner-dark {
+      width: 24px; height: 24px;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .6s linear infinite;
+      margin: 2rem auto; display: block;
+    }
+
+    /* ── LOGIN ── */
+    #login-screen {
+      min-height: 100dvh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 1.5rem;
+    }
+    .login-logo {
+      width: 56px; height: 56px; background: var(--accent); border-radius: 14px;
+      margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── BUCHUNG LIST ── */
+    .buchung-item {
+      display: flex; align-items: flex-start; gap: .75rem;
+      padding: .875rem 1rem;
+    }
+    .buchung-item + .buchung-item { border-top: 1px solid var(--border); }
+    .buchung-dot {
+      width: 8px; height: 8px; border-radius: 50%; margin-top: .4rem; flex-shrink: 0;
+    }
+    .buchung-dot.income  { background: var(--income); }
+    .buchung-dot.expense { background: var(--expense); }
+    .buchung-info { flex: 1; min-width: 0; }
+    .buchung-kategorie { font-size: .875rem; font-weight: 500; }
+    .buchung-datum { font-size: .75rem; color: var(--muted); }
+    .buchung-betrag { font-size: .9375rem; font-weight: 600; tabular-nums: var(--tabular); white-space: nowrap; }
+
+    /* ── OVERVIEW CARDS ── */
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .kpi-card { padding: 1rem; border-radius: var(--r); }
+    .kpi-card.income-card { background: var(--accent-l); border: 1px solid #c5dbc9; }
+    .kpi-card.expense-card { background: var(--danger-l); border: 1px solid #f0c8c3; }
+    .kpi-card.saldo-card { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--sh); }
+    .kpi-label { font-size: .75rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .kpi-value { font-size: 1.375rem; font-weight: 700; margin-top: .25rem; line-height: 1.2; }
+
+    /* ── PHOTO ── */
+    .photo-preview {
+      width: 100%; max-height: 200px; object-fit: cover;
+      border-radius: 8px; border: 1px solid var(--border);
+    }
+    .upload-area {
+      border: 1.5px dashed var(--border); border-radius: 8px;
+      padding: 1.25rem; text-align: center; cursor: pointer;
+      background: var(--bg); transition: border-color .15s;
+    }
+    .upload-area:hover { border-color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     LOADING
+════════════════════════════════════════════════════════════════ -->
+<div id="loading" style="min-height:100dvh;display:flex;align-items:center;justify-content:center;">
+  <div class="spinner-dark"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     LOGIN
+════════════════════════════════════════════════════════════════ -->
+<div id="login-screen" class="hidden">
+  <div style="width:100%;max-width:360px;">
+    <div style="text-align:center;margin-bottom:2.5rem;">
+      <div class="login-logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </div>
+      <h1 style="font-size:1.375rem;margin-bottom:.25rem;">Mietwohnungs-Tracker</h1>
+      <p class="muted text-sm">Einnahmen und Ausgaben im Blick</p>
+    </div>
+    <div class="card" style="padding:1.5rem;">
+      <div class="stack">
+        <div class="form-group">
+          <label for="login-email">E-Mail</label>
+          <input id="login-email" type="email" placeholder="name@beispiel.de" autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label for="login-pw">Passwort</label>
+          <input id="login-pw" type="password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div id="login-error" class="error-msg hidden"></div>
+        <button id="login-btn" class="btn btn-primary" style="margin-top:.25rem;">Anmelden</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     APP SHELL
+════════════════════════════════════════════════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <span id="topbar-title" class="topbar-title">Übersicht</span>
+    <span id="topbar-action"></span>
+  </header>
+
+  <!-- Pages -->
+  <main>
+
+    <!-- ── ÜBERSICHT ── -->
+    <div id="page-uebersicht" class="page hidden">
+      <div class="row-between" style="margin-bottom:1rem;">
+        <div>
+          <h2 id="ueb-jahr">2025</h2>
+          <p class="muted text-xs">Jahresübersicht</p>
+        </div>
+        <div class="row" style="gap:.5rem;">
+          <button class="btn-sm" onclick="App.changeJahr(-1)">&#8249;</button>
+          <button class="btn-sm" onclick="App.changeJahr(1)">&#8250;</button>
+          <button class="btn-sm" onclick="App.toggleWaehrung()" id="ueb-waehrung-btn">CHF</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card income-card">
+          <div class="kpi-label">Einnahmen</div>
+          <div class="kpi-value income tabular" id="ueb-einnahmen">–</div>
+        </div>
+        <div class="kpi-card expense-card">
+          <div class="kpi-label">Ausgaben</div>
+          <div class="kpi-value expense tabular" id="ueb-ausgaben">–</div>
+        </div>
+      </div>
+
+      <div class="kpi-card saldo-card mt-2 row-between" style="padding:1rem;">
+        <div>
+          <div class="kpi-label">Saldo</div>
+          <div class="kpi-value tabular" id="ueb-saldo">–</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="kpi-label">Buchungen</div>
+          <div class="kpi-value" id="ueb-count">–</div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;">Nach Kategorie</h3>
+      <div class="card" id="ueb-kategorien" style="overflow:hidden;">
+        <div style="padding:1rem;color:var(--muted);font-size:.875rem;">Lade Daten…</div>
+      </div>
+    </div>
+
+    <!-- ── BUCHUNGEN ── -->
+    <div id="page-buchungen" class="page hidden">
+      <div class="stack-sm" id="buchungen-list">
+        <div class="spinner-dark"></div>
+      </div>
+    </div>
+
+    <!-- ── NEU ── -->
+    <div id="page-neu" class="page hidden">
+      <div class="card" style="padding:1.25rem;overflow:hidden;">
+        <div class="stack">
+
+          <!-- Typ -->
+          <div class="form-group">
+            <label>Typ</label>
+            <div class="segment">
+              <button class="seg-btn active" id="typ-ausgabe" onclick="App.setTyp('ausgabe')">Ausgabe</button>
+              <button class="seg-btn" id="typ-einnahme" onclick="App.setTyp('einnahme')">Einnahme</button>
+            </div>
+          </div>
+
+          <!-- Kategorie -->
+          <div class="form-group">
+            <label for="neu-kategorie">Kategorie</label>
+            <select id="neu-kategorie"></select>
+          </div>
+
+          <!-- Betrag + Währung -->
+          <div class="row" style="gap:.75rem;">
+            <div class="form-group" style="flex:1;">
+              <label for="neu-betrag">Betrag</label>
+              <input id="neu-betrag" type="number" inputmode="decimal" placeholder="0.00" min="0" step="0.01" />
+            </div>
+            <div class="form-group" style="width:90px;">
+              <label for="neu-waehrung">Währung</label>
+              <select id="neu-waehrung">
+                <option value="EUR">EUR</option>
+                <option value="CHF">CHF</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Datum -->
+          <div class="form-group">
+            <label for="neu-datum">Datum</label>
+            <input id="neu-datum" type="date" />
+          </div>
+
+          <!-- Notiz -->
+          <div class="form-group">
+            <label for="neu-notiz">Notiz (optional)</label>
+            <textarea id="neu-notiz" placeholder="z.B. Rechnung von Hausverwaltung"></textarea>
+          </div>
+
+          <!-- Foto -->
+          <div class="form-group">
+            <label>Beleg (optional)</label>
+            <div class="upload-area" onclick="document.getElementById('neu-foto-input').click()">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto .5rem;display:block;">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span class="muted text-sm">Foto auswählen</span>
+              <input id="neu-foto-input" type="file" accept="image/*" capture="environment" style="display:none;" onchange="App.fotoSelected(this)" />
+            </div>
+            <img id="neu-foto-preview" class="photo-preview hidden" />
+            <button id="neu-foto-remove" class="btn-sm hidden" style="margin-top:.5rem;" onclick="App.fotoRemove()">Foto entfernen</button>
+          </div>
+
+          <div id="neu-error" class="error-msg hidden"></div>
+          <button id="neu-save-btn" class="btn btn-primary" onclick="App.saveBuchung()">Speichern</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── EINSTELLUNGEN ── -->
+    <div id="page-einstellungen" class="page hidden">
+      <div class="stack">
+
+        <div class="card" style="padding:1rem 1.25rem;">
+          <p class="text-xs muted">Angemeldet als</p>
+          <p class="bold mt-1" id="settings-email"></p>
+        </div>
+
+        <div class="card" style="padding:1.25rem;">
+          <h3 style="margin-bottom:1rem;">Wechselkurs EUR / CHF</h3>
+          <div class="row" style="gap:.75rem;">
+            <div class="form-group" style="flex:1;">
+              <label for="kurs-input">1 EUR =</label>
+              <div class="row" style="gap:.5rem;">
+                <input id="kurs-input" type="number" inputmode="decimal" step="0.0001" placeholder="0.9400" style="flex:1;" />
+                <span class="muted text-sm" style="white-space:nowrap;">CHF</span>
+              </div>
+            </div>
+          </div>
+          <div id="kurs-msg" class="hidden mt-1"></div>
+          <button class="btn btn-primary mt-2" onclick="App.saveKurs()">Kurs speichern</button>
+        </div>
+
+        <button class="btn btn-secondary" onclick="App.logout()">Abmelden</button>
+
+        <p class="muted text-xs" style="text-align:center;">PDF-Export kommt in Phase 4.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-uebersicht" onclick="App.goto('uebersicht')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      Übersicht
+    </button>
+    <button class="nav-btn" id="nav-buchungen" onclick="App.goto('buchungen')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+        <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+      Buchungen
+    </button>
+    <button class="nav-btn" id="nav-neu" onclick="App.goto('neu')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+      Neu
+    </button>
+    <button class="nav-btn" id="nav-einstellungen" onclick="App.goto('einstellungen')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      Einstellungen
+    </button>
+  </nav>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════════════════════
+
+const KATEGORIEN = {
+  einnahme: [
+    'Kaltmiete',
+    'Nebenkostenvorauszahlung',
+    'Nebenkostennachzahlung',
+    'Sonstige Einnahmen'
+  ],
+  ausgabe: [
+    'Hypothekarzinsen / Schuldzinsen',
+    'Reparaturen & Unterhalt',
+    'Nebenkosten (Wasser, Strom, Heizung)',
+    'Hausverwaltung / Verwaltungskosten',
+    'Gebäude- & Haftpflichtversicherung',
+    'Grundsteuer / Liegenschaftssteuer',
+    'Instandhaltungsrücklage',
+    'Abschreibung AfA',
+    'Energiespar-Investitionen',
+    'Fahrtkosten zur Immobilie',
+    'Sonstige Werbungskosten'
+  ]
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// APP STATE
+// ═══════════════════════════════════════════════════════════════════════════
+
+const State = {
+  user:          null,
+  currentPage:   'uebersicht',
+  buchungen:     [],
+  jahr:          new Date().getFullYear(),
+  anzeigeWaehrung: 'EUR',
+  kurs:          0.94,   // 1 EUR in CHF
+  neuTyp:        'ausgabe',
+  neuFotoFile:   null,
+  neuFotoURL:    null,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FORMAT HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function fmt(betrag, waehrung) {
+  return new Intl.NumberFormat('de-CH', {
+    style: 'currency', currency: waehrung, minimumFractionDigits: 2
+  }).format(betrag);
+}
+
+function toEUR(betrag, waehrung) {
+  if (waehrung === 'EUR') return betrag;
+  return betrag / State.kurs;  // CHF → EUR
+}
+
+function toAnzeige(betrag, waehrung) {
+  const eur = toEUR(betrag, waehrung);
+  if (State.anzeigeWaehrung === 'EUR') return eur;
+  return eur * State.kurs;  // EUR → CHF
+}
+
+function fmtAnzeige(betrag, waehrung) {
+  return fmt(toAnzeige(betrag, waehrung), State.anzeigeWaehrung);
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIRESTORE HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadBuchungen() {
+  const { db, collection, getDocs, query, orderBy } = window._fb;
+  const uid = State.user.uid;
+  const q = query(collection(db, `users/${uid}/buchungen`), orderBy('datum', 'desc'));
+  const snap = await getDocs(q);
+  State.buchungen = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function loadSettings() {
+  const { db, doc, getDoc } = window._fb;
+  const uid = State.user.uid;
+  const snap = await getDoc(doc(db, `users/${uid}/settings/main`));
+  if (snap.exists()) {
+    const data = snap.data();
+    if (data.kurs) State.kurs = data.kurs;
+    if (data.letzteWaehrung) document.getElementById('neu-waehrung').value = data.letzteWaehrung;
+  }
+  document.getElementById('kurs-input').value = State.kurs;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// APP CONTROLLER
+// ═══════════════════════════════════════════════════════════════════════════
+
+const App = {
+
+  // ── Navigation ──────────────────────────────────────────────────────────
+  goto(page) {
+    // hide all pages
+    document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+    State.currentPage = page;
+    document.getElementById(`page-${page}`).classList.remove('hidden');
+    const navBtn = document.getElementById(`nav-${page}`);
+    if (navBtn) navBtn.classList.add('active');
+
+    const titles = {
+      uebersicht: 'Übersicht',
+      buchungen: 'Buchungen',
+      neu: 'Neue Buchung',
+      einstellungen: 'Einstellungen'
+    };
+    document.getElementById('topbar-title').textContent = titles[page] || '';
+
+    if (page === 'uebersicht') App.renderUebersicht();
+    if (page === 'buchungen')  App.renderBuchungen();
+    if (page === 'neu')        App.resetNeu();
+  },
+
+  // ── Übersicht ────────────────────────────────────────────────────────────
+  changeJahr(delta) {
+    State.jahr += delta;
+    document.getElementById('ueb-jahr').textContent = State.jahr;
+    App.renderUebersicht();
+  },
+
+  toggleWaehrung() {
+    State.anzeigeWaehrung = State.anzeigeWaehrung === 'EUR' ? 'CHF' : 'EUR';
+    document.getElementById('ueb-waehrung-btn').textContent =
+      State.anzeigeWaehrung === 'EUR' ? 'CHF' : 'EUR';
+    App.renderUebersicht();
+  },
+
+  renderUebersicht() {
+    const jahresBuchungen = State.buchungen.filter(b => {
+      return b.datum && b.datum.startsWith(String(State.jahr));
+    });
+
+    let einnahmen = 0, ausgaben = 0;
+    const byKat = {};
+
+    jahresBuchungen.forEach(b => {
+      const val = toAnzeige(b.betrag, b.waehrung);
+      if (b.typ === 'einnahme') einnahmen += val;
+      else ausgaben += val;
+
+      if (!byKat[b.kategorie]) byKat[b.kategorie] = { einnahmen: 0, ausgaben: 0, typ: b.typ };
+      if (b.typ === 'einnahme') byKat[b.kategorie].einnahmen += val;
+      else byKat[b.kategorie].ausgaben += val;
+    });
+
+    const saldo = einnahmen - ausgaben;
+    const w = State.anzeigeWaehrung;
+
+    document.getElementById('ueb-einnahmen').textContent = fmt(einnahmen, w);
+    document.getElementById('ueb-ausgaben').textContent  = fmt(ausgaben, w);
+    document.getElementById('ueb-saldo').textContent     = fmt(saldo, w);
+    document.getElementById('ueb-saldo').className       = 'kpi-value tabular ' + (saldo >= 0 ? 'income' : 'expense');
+    document.getElementById('ueb-count').textContent     = jahresBuchungen.length;
+
+    // Kategorientabelle
+    const container = document.getElementById('ueb-kategorien');
+    if (Object.keys(byKat).length === 0) {
+      container.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:.875rem;">Keine Buchungen in ' + State.jahr + '</div>';
+      return;
+    }
+
+    const rows = Object.entries(byKat)
+      .sort((a, b) => (b[1].einnahmen + b[1].ausgaben) - (a[1].einnahmen + a[1].ausgaben))
+      .map(([kat, v]) => {
+        const betrag = v.typ === 'einnahme' ? v.einnahmen : v.ausgaben;
+        const cls = v.typ === 'einnahme' ? 'income' : 'expense';
+        return `<div class="row-between" style="padding:.75rem 1rem;">
+          <span class="text-sm">${kat}</span>
+          <span class="text-sm bold tabular ${cls}">${fmt(betrag, w)}</span>
+        </div>`;
+      }).join('<div class="divider"></div>');
+
+    container.innerHTML = rows;
+  },
+
+  // ── Buchungen Liste ──────────────────────────────────────────────────────
+  renderBuchungen() {
+    const list = document.getElementById('buchungen-list');
+    if (State.buchungen.length === 0) {
+      list.innerHTML = '<p class="muted text-sm" style="text-align:center;padding:2rem 0;">Noch keine Buchungen.</p>';
+      return;
+    }
+
+    const html = '<div class="card" style="overflow:hidden;">' +
+      State.buchungen.map(b => `
+        <div class="buchung-item">
+          <div class="buchung-dot ${b.typ}"></div>
+          <div class="buchung-info">
+            <div class="buchung-kategorie">${b.kategorie}</div>
+            <div class="buchung-datum">${fmtDate(b.datum)}${b.notiz ? ' · ' + b.notiz : ''}</div>
+          </div>
+          <div>
+            <div class="buchung-betrag ${b.typ === 'einnahme' ? 'income' : 'expense'}">
+              ${b.typ === 'ausgabe' ? '−' : '+'}${fmt(b.betrag, b.waehrung)}
+            </div>
+            ${b.fotoURL ? `<div style="margin-top:.25rem;text-align:right;"><a href="${b.fotoURL}" target="_blank" style="font-size:.75rem;color:var(--accent);">Beleg</a></div>` : ''}
+          </div>
+        </div>
+      `).join('<div class="divider"></div>') +
+    '</div>';
+
+    list.innerHTML = html;
+  },
+
+  // ── Neue Buchung ─────────────────────────────────────────────────────────
+  resetNeu() {
+    State.neuTyp = 'ausgabe';
+    State.neuFotoFile = null;
+    State.neuFotoURL = null;
+
+    document.getElementById('typ-ausgabe').classList.add('active');
+    document.getElementById('typ-einnahme').classList.remove('active');
+    document.getElementById('neu-betrag').value = '';
+    document.getElementById('neu-datum').value = todayISO();
+    document.getElementById('neu-notiz').value = '';
+    document.getElementById('neu-foto-preview').classList.add('hidden');
+    document.getElementById('neu-foto-preview').src = '';
+    document.getElementById('neu-foto-remove').classList.add('hidden');
+    document.getElementById('neu-foto-input').value = '';
+    document.getElementById('neu-error').classList.add('hidden');
+    document.getElementById('neu-save-btn').disabled = false;
+    document.getElementById('neu-save-btn').textContent = 'Speichern';
+
+    App.updateKategorien();
+  },
+
+  setTyp(typ) {
+    State.neuTyp = typ;
+    document.getElementById('typ-ausgabe').classList.toggle('active', typ === 'ausgabe');
+    document.getElementById('typ-einnahme').classList.toggle('active', typ === 'einnahme');
+    App.updateKategorien();
+  },
+
+  updateKategorien() {
+    const sel = document.getElementById('neu-kategorie');
+    const opts = KATEGORIEN[State.neuTyp];
+    sel.innerHTML = opts.map(k => `<option value="${k}">${k}</option>`).join('');
+  },
+
+  fotoSelected(input) {
+    const file = input.files[0];
+    if (!file) return;
+    State.neuFotoFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const preview = document.getElementById('neu-foto-preview');
+      preview.src = e.target.result;
+      preview.classList.remove('hidden');
+      document.getElementById('neu-foto-remove').classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+  },
+
+  fotoRemove() {
+    State.neuFotoFile = null;
+    State.neuFotoURL = null;
+    document.getElementById('neu-foto-preview').classList.add('hidden');
+    document.getElementById('neu-foto-preview').src = '';
+    document.getElementById('neu-foto-remove').classList.add('hidden');
+    document.getElementById('neu-foto-input').value = '';
+  },
+
+  async saveBuchung() {
+    const btn = document.getElementById('neu-save-btn');
+    const errEl = document.getElementById('neu-error');
+    errEl.classList.add('hidden');
+
+    const betrag = parseFloat(document.getElementById('neu-betrag').value);
+    const datum  = document.getElementById('neu-datum').value;
+    const kat    = document.getElementById('neu-kategorie').value;
+    const waehr  = document.getElementById('neu-waehrung').value;
+    const notiz  = document.getElementById('neu-notiz').value.trim();
+
+    if (!betrag || betrag <= 0) { errEl.textContent = 'Bitte einen gültigen Betrag eingeben.'; errEl.classList.remove('hidden'); return; }
+    if (!datum)  { errEl.textContent = 'Bitte ein Datum wählen.'; errEl.classList.remove('hidden'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const { db, storage, collection, addDoc, doc, setDoc, ref, uploadBytes, getDownloadURL } = window._fb;
+      const uid = State.user.uid;
+
+      // Upload foto if present
+      let fotoURL = null;
+      if (State.neuFotoFile) {
+        const storageRef = ref(storage, `users/${uid}/belege/${Date.now()}_${State.neuFotoFile.name}`);
+        const snap = await uploadBytes(storageRef, State.neuFotoFile);
+        fotoURL = await getDownloadURL(snap.ref);
+      }
+
+      const buchung = {
+        typ: State.neuTyp,
+        kategorie: kat,
+        betrag,
+        waehrung: waehr,
+        datum,
+        notiz,
+        fotoURL,
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, `users/${uid}/buchungen`), buchung);
+
+      // Save last used currency
+      await setDoc(doc(db, `users/${uid}/settings/main`), { letzteWaehrung: waehr, kurs: State.kurs }, { merge: true });
+
+      // Reload and go back
+      await loadBuchungen();
+      App.goto('buchungen');
+
+    } catch (e) {
+      console.error(e);
+      errEl.textContent = 'Fehler beim Speichern: ' + e.message;
+      errEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Speichern';
+    }
+  },
+
+  // ── Einstellungen ────────────────────────────────────────────────────────
+  async saveKurs() {
+    const val = parseFloat(document.getElementById('kurs-input').value);
+    const msg = document.getElementById('kurs-msg');
+    if (!val || val <= 0) {
+      msg.className = 'error-msg mt-1';
+      msg.textContent = 'Ungültiger Wechselkurs.';
+      return;
+    }
+    State.kurs = val;
+    const { db, doc, setDoc } = window._fb;
+    const uid = State.user.uid;
+    await setDoc(doc(db, `users/${uid}/settings/main`), { kurs: val }, { merge: true });
+    msg.className = 'success-msg mt-1';
+    msg.textContent = 'Gespeichert.';
+    setTimeout(() => msg.classList.add('hidden'), 2000);
+  },
+
+  logout() {
+    window._fb.signOut(window._fb.auth);
+  }
+};
+
+window.App = App;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════════
+
+window._boot = function() {
+  const { auth, onAuthStateChanged } = window._fb;
+
+  onAuthStateChanged(auth, async (user) => {
+    document.getElementById('loading').classList.add('hidden');
+
+    if (!user) {
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('app').classList.add('hidden');
+      return;
+    }
+
+    // Logged in
+    State.user = user;
+    document.getElementById('settings-email').textContent = user.email;
+    document.getElementById('ueb-jahr').textContent = State.jahr;
+
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+
+    // Load data
+    await Promise.all([loadBuchungen(), loadSettings()]);
+    App.goto('uebersicht');
+  });
+
+  // Login button
+  document.getElementById('login-btn').addEventListener('click', async () => {
+    const email = document.getElementById('login-email').value.trim();
+    const pw    = document.getElementById('login-pw').value;
+    const errEl = document.getElementById('login-error');
+    const btn   = document.getElementById('login-btn');
+    errEl.classList.add('hidden');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      await window._fb.signInWithEmailAndPassword(auth, email, pw);
+    } catch (e) {
+      errEl.textContent = 'E-Mail oder Passwort falsch.';
+      errEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Anmelden';
+    }
+  });
+
+  // Enter key on login
+  document.getElementById('login-pw').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('login-btn').click();
+  });
+};
+</script>
+</body>
 </html>
