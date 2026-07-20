@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#1a2744"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Wohnung"/>
+<title>Mietwohnungs-Tracker</title>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc,
+    onSnapshot, query, where, orderBy, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBKgDaPcntG_EVWESjhUvzcvja3QWVX7mU",
+    authDomain: "wohnung-7fe03.firebaseapp.com",
+    projectId: "wohnung-7fe03",
+    storageBucket: "wohnung-7fe03.firebasestorage.app",
+    messagingSenderId: "961868714782",
+    appId: "1:961868714782:web:aa2bf0ba5205729f672f0f"
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // ── Constants ─────────────────────────────────────────────
+  const EINNAHMEN_KAT = [
+    { id:'miete',         label:'Kaltmiete',                   icon:'🏠' },
+    { id:'nebenkosten_vz',label:'Nebenkostenvorauszahlung',    icon:'💧' },
+    { id:'kaution',       label:'Kaution',                     icon:'🔐' },
+    { id:'nachzahlung',   label:'Nachzahlung Mieter',          icon:'↩️' },
+    { id:'sonstiges_ein', label:'Sonstiges',                   icon:'📋' },
+  ];
+  const AUSGABEN_KAT = [
+    { id:'grundsteuer',      label:'Grundsteuer',                        icon:'🏛️', betrKV:true,  nr:1  },
+    { id:'wasser',           label:'Wasser & Abwasser',                  icon:'💧', betrKV:true,  nr:2  },
+    { id:'heizung',          label:'Heizung',                            icon:'🔥', betrKV:true,  nr:4  },
+    { id:'warmwasser',       label:'Warmwasser',                         icon:'♨️', betrKV:true,  nr:5  },
+    { id:'aufzug',           label:'Fahrstuhl / Aufzug',                 icon:'🛗', betrKV:true,  nr:7  },
+    { id:'muell',            label:'Müllabfuhr',                         icon:'🗑️', betrKV:true,  nr:8  },
+    { id:'strassenreinigung',label:'Straßenreinigung',                   icon:'🧹', betrKV:true,  nr:8  },
+    { id:'gebaeudereinigung',label:'Gebäudereinigung',                   icon:'🧽', betrKV:true,  nr:9  },
+    { id:'gartenpflege',     label:'Gartenpflege',                       icon:'🌿', betrKV:true,  nr:10 },
+    { id:'allgemeinstrom',   label:'Allgemeinstrom',                     icon:'💡', betrKV:true,  nr:11 },
+    { id:'schornstein',      label:'Schornsteinreinigung',               icon:'🏗️', betrKV:true,  nr:12 },
+    { id:'versicherung',     label:'Sach- & Haftpflichtversicherung',    icon:'🛡️', betrKV:true,  nr:13 },
+    { id:'hauswart',         label:'Hauswart',                           icon:'👷', betrKV:true,  nr:14 },
+    { id:'kabel',            label:'Kabelgebühren / Internet',           icon:'📡', betrKV:true,  nr:15 },
+    { id:'waeschepflege',    label:'Wäschepflege',                       icon:'👕', betrKV:true,  nr:16 },
+    { id:'sonstige_betrKV', label:'Sonstige Betriebskosten (BetrKV)',   icon:'📦', betrKV:true,  nr:17 },
+    { id:'reparatur',        label:'Reparaturen',                        icon:'🔧', betrKV:false },
+    { id:'verwaltung',       label:'Verwaltungskosten',                  icon:'📁', betrKV:false },
+    { id:'hypothek',         label:'Hypothek / Zinsen',                  icon:'🏦', betrKV:false },
+    { id:'steuer',           label:'Steuern',                            icon:'📊', betrKV:false },
+    { id:'sonstiges_aus',    label:'Sonstiges',                          icon:'📋', betrKV:false },
+  ];
+  const MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const ALL_KAT = [...EINNAHMEN_KAT, ...AUSGABEN_KAT];
+
+  // ── State ─────────────────────────────────────────────────
+  let state = {
+    user: undefined,        // undefined=loading, null=logged out
+    view: 'login',          // login | wohnungen | dashboard | buchungen | nebenkosten | export
+    wohnungen: [],
+    buchungen: [],
+    mieter: null,
+    activeWohnung: null,
+    jahr: new Date().getFullYear(),
+    filterTyp: 'alle',
+    filterMonat: 'alle',
+    unsubs: [],
+  };
+
+  // ── Helpers ────────────────────────────────────────────────
+  const fmt = (n, waehrung) => {
+    const s = waehrung === 'CHF' ? 'CHF ' : '€';
+    return s + Number(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  };
+  const katLabel = id => ALL_KAT.find(k=>k.id===id)?.label || id;
+  const today = () => new Date().toISOString().split('T')[0];
+  const $ = id => document.getElementById(id);
+
+  // ── Firestore listeners ────────────────────────────────────
+  function subscribeWohnungen(uid) {
+    const q = query(collection(db,'wohnungen'), where('userId','==',uid), orderBy('createdAt','asc'));
+    return onSnapshot(q, snap => {
+      state.wohnungen = snap.docs.map(d=>({id:d.id,...d.data()}));
+      render();
+    });
+  }
+  function subscribeBuchungen(uid, wohnungId) {
+    const q = query(collection(db,'buchungen'),
+      where('userId','==',uid), where('wohnungId','==',wohnungId), orderBy('datum','desc'));
+    return onSnapshot(q, snap => {
+      state.buchungen = snap.docs.map(d=>({id:d.id,...d.data()}));
+      render();
+    });
+  }
+  function subscribeMieter(uid, wohnungId) {
+    const q = query(collection(db,'mieter'), where('userId','==',uid), where('wohnungId','==',wohnungId));
+    return onSnapshot(q, snap => {
+      state.mieter = snap.empty ? null : {id:snap.docs[0].id,...snap.docs[0].data()};
+      render();
+    });
+  }
+  function clearSubs() {
+    state.unsubs.forEach(u=>u());
+    state.unsubs = [];
+  }
+
+  // ── Navigation ─────────────────────────────────────────────
+  function goTo(view, wohnungId) {
+    if (wohnungId && wohnungId !== state.activeWohnung) {
+      clearSubs();
+      state.activeWohnung = wohnungId;
+      state.buchungen = [];
+      state.mieter = null;
+      const uid = state.user.uid;
+      state.unsubs.push(subscribeBuchungen(uid, wohnungId));
+      state.unsubs.push(subscribeMieter(uid, wohnungId));
+    }
+    state.view = view;
+    render();
+  }
+
+  // ── Auth ───────────────────────────────────────────────────
+  onAuthStateChanged(auth, user => {
+    state.user = user;
+    if (user) {
+      clearSubs();
+      state.unsubs.push(subscribeWohnungen(user.uid));
+      state.view = 'wohnungen';
+    } else {
+      clearSubs();
+      state.wohnungen = [];
+      state.buchungen = [];
+      state.view = 'login';
+    }
+    render();
+  });
+
+  // ── PDF Export ─────────────────────────────────────────────
+  async function loadJsPDF() {
+    if (window.jspdf) return window.jspdf.jsPDF;
+    await new Promise(res => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = res; document.head.appendChild(s);
+    });
+    await new Promise(res => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+      s.onload = res; document.head.appendChild(s);
+    });
+    return window.jspdf.jsPDF;
+  }
+
+  async function exportNebenkostenPDF(jahr) {
+    const JsPDF = await loadJsPDF();
+    const doc = new JsPDF();
+    const w = state.activeWohnungObj();
+    const m = state.mieter;
+    const b = state.buchungen.filter(b=>b.datum?.startsWith(String(jahr)));
+
+    // Header
+    doc.setFillColor(26,39,68);
+    doc.rect(0,0,210,28,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text('Nebenkostenabrechnung', 14, 12);
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    doc.text(`Abrechnungszeitraum: 01.01.${jahr} – 31.12.${jahr}`, 14, 20);
+    doc.setTextColor(0,0,0);
+
+    let y = 36;
+    doc.setFontSize(10); doc.setFont('helvetica','bold');
+    doc.text('Vermieter', 14, y); doc.text('Mieter', 110, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    [w.vermieterName||'–', w.vermieterAdresse||'–'].forEach((l,i)=>doc.text(l,14,y+6+i*5));
+    [m?.name||'–', w.adresse||'–'].forEach((l,i)=>doc.text(l,110,y+6+i*5));
+    y += 26;
+
+    doc.setFillColor(240,244,250);
+    doc.rect(14,y,182,10,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text(`Wohnfläche: ${w.wohnflaeche||'–'} m²   |   Verteilerschlüssel: Wohnfläche`, 18, y+6.5);
+    y += 16;
+
+    const rows = []; let total = 0;
+    AUSGABEN_KAT.filter(k=>k.betrKV).forEach(kat => {
+      const sum = b.filter(x=>x.typ==='ausgabe'&&x.kategorie===kat.id).reduce((a,x)=>a+(x.betrag||0),0);
+      if (sum>0) { rows.push([`§2 Nr.${kat.nr} BetrKV`, kat.label, fmt(sum,w.waehrung)]); total+=sum; }
+    });
+
+    doc.autoTable({ startY:y,
+      head:[['Rechtsgrundlage','Kostenart','Betrag']],
+      body: rows,
+      foot:[['','Gesamtkosten', fmt(total,w.waehrung)]],
+      headStyles:{fillColor:[26,39,68],textColor:255,fontSize:9},
+      footStyles:{fillColor:[220,230,245],fontStyle:'bold'},
+      styles:{fontSize:9}, columnStyles:{2:{halign:'right'}}
+    });
+    y = doc.lastAutoTable.finalY + 10;
+
+    const vz = b.filter(x=>x.typ==='einnahme'&&x.kategorie==='nebenkosten_vz').reduce((a,x)=>a+(x.betrag||0),0)
+              || (m?.vorauszahlung ? m.vorauszahlung*12 : 0);
+    const saldo = vz - total;
+
+    doc.autoTable({ startY:y,
+      body:[
+        ['Gesamtkosten Nebenkosten', fmt(total,w.waehrung)],
+        ['Geleistete Vorauszahlungen', fmt(vz,w.waehrung)],
+        [saldo>=0 ? '✓ Guthaben Mieter' : '⚠ Nachzahlung Mieter', fmt(Math.abs(saldo),w.waehrung)],
+      ],
+      styles:{fontSize:10}, columnStyles:{1:{halign:'right',fontStyle:'bold'}}
+    });
+    y = doc.lastAutoTable.finalY + 16;
+
+    doc.setDrawColor(180,180,180);
+    doc.line(14,y,80,y); doc.line(120,y,196,y);
+    doc.setFontSize(8); doc.setTextColor(100,100,100);
+    doc.text('Datum / Unterschrift Vermieter',14,y+5);
+    doc.text('Datum / Unterschrift Mieter',120,y+5);
+
+    const d = new Date().toLocaleDateString('de-DE');
+    for(let i=1;i<=doc.internal.getNumberOfPages();i++){
+      doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150);
+      doc.text(`Erstellt am ${d} – Mietwohnungs-Tracker`,14,290);
+      doc.text(`Seite ${i}/${doc.internal.getNumberOfPages()}`,180,290);
+    }
+    doc.save(`Nebenkostenabrechnung_${jahr}.pdf`);
+  }
+
+  async function exportSteuerPDF(jahr, land, zielWaehrung, wechselkurs) {
+    const JsPDF = await loadJsPDF();
+    const doc = new JsPDF();
+    const w = state.activeWohnungObj();
+    const b = state.buchungen.filter(x=>x.datum?.startsWith(String(jahr)));
+    const kv = (betrag) => w.waehrung===zielWaehrung ? betrag : betrag*(wechselkurs||1);
+    const landLabel = land==='ch' ? 'Schweiz' : 'Deutschland – Baden-Württemberg';
+
+    doc.setFillColor(26,39,68);
+    doc.rect(0,0,210,28,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text(`Steuerübersicht ${jahr}`, 14, 12);
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    doc.text(`${landLabel} | ${w.adresse||''}`, 14, 20);
+    doc.setTextColor(0,0,0);
+
+    const ein = b.filter(x=>x.typ==='einnahme');
+    const aus = b.filter(x=>x.typ==='ausgabe');
+    const sumEin = ein.reduce((a,x)=>a+kv(x.betrag||0),0);
+    const sumAus = aus.reduce((a,x)=>a+kv(x.betrag||0),0);
+    let y = 36;
+
+    doc.setFillColor(240,244,250); doc.rect(14,y,182,24,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('Zusammenfassung',18,y+7);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text(`Einnahmen: ${fmt(sumEin,zielWaehrung)}`,18,y+14);
+    doc.text(`Ausgaben: ${fmt(sumAus,zielWaehrung)}`,90,y+14);
+    doc.setFont('helvetica','bold');
+    const saldo = sumEin-sumAus;
+    doc.setTextColor(saldo>=0?0:180, saldo>=0?100:0, 0);
+    doc.text(`Überschuss / Verlust: ${fmt(saldo,zielWaehrung)}`,18,y+21);
+    doc.setTextColor(0,0,0); y+=32;
+
+    if (w.waehrung!==zielWaehrung) {
+      doc.setFontSize(8); doc.setTextColor(100);
+      doc.text(`Wechselkurs: 1 ${w.waehrung} = ${wechselkurs} ${zielWaehrung}`,14,y);
+      doc.setTextColor(0); y+=8;
+    }
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Einnahmen',14,y); y+=4;
+    doc.autoTable({ startY:y,
+      head:[['Datum','Beschreibung','Kategorie',`Betrag (${zielWaehrung})`]],
+      body: ein.map(x=>[x.datum||'–',x.notiz||'–',x.kategorieLabel||x.kategorie,fmt(kv(x.betrag||0),zielWaehrung)]),
+      foot:[['','','Summe Einnahmen',fmt(sumEin,zielWaehrung)]],
+      headStyles:{fillColor:[26,120,80],textColor:255,fontSize:8},
+      footStyles:{fillColor:[220,245,230],fontStyle:'bold'},
+      styles:{fontSize:8}, columnStyles:{3:{halign:'right'}}
+    });
+    y = doc.lastAutoTable.finalY+10;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Ausgaben (Werbungskosten)',14,y); y+=4;
+    doc.autoTable({ startY:y,
+      head:[['Datum','Beschreibung','Kategorie',`Betrag (${zielWaehrung})`]],
+      body: aus.map(x=>[x.datum||'–',x.notiz||'–',x.kategorieLabel||x.kategorie,fmt(kv(x.betrag||0),zielWaehrung)]),
+      foot:[['','','Summe Ausgaben',fmt(sumAus,zielWaehrung)]],
+      headStyles:{fillColor:[26,39,68],textColor:255,fontSize:8},
+      footStyles:{fillColor:[220,230,245],fontStyle:'bold'},
+      styles:{fontSize:8}, columnStyles:{3:{halign:'right'}}
+    });
+
+    doc.addPage();
+    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Hinweise für die Steuererklärung',14,20);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    const hints = land==='ch' ? [
+      '• Formular Steuererklärung (Kanton): Liegenschaft im Ausland deklarieren',
+      '• Mieteinnahmen als Einkommen aus unbeweglichem Vermögen',
+      '• DBA Deutschland–Schweiz: DE hat Besteuerungsrecht, CH rechnet an',
+      '• Liegenschaftsunterhalt: pauschale oder effektive Methode wählen',
+      '• Hypozinsen als Schuldzinsen abziehbar',
+    ] : [
+      '• Anlage V (Einkünfte aus Vermietung und Verpachtung) ausfüllen',
+      '• Einnahmen in Zeile 9 ff. eintragen (Miete + Nebenkosten)',
+      '• Werbungskosten in Zeile 33 ff. (Zinsen, Abschreibung, Verwaltung etc.)',
+      '• Ggf. lineare AfA auf Anschaffungskosten prüfen (2% pro Jahr)',
+      '• Baden-Württemberg: Grundsteuer B beachten',
+    ];
+    hints.forEach((h,i)=>doc.text(h,14,34+i*8));
+
+    const d2 = new Date().toLocaleDateString('de-DE');
+    for(let i=1;i<=doc.internal.getNumberOfPages();i++){
+      doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150);
+      doc.text(`Erstellt am ${d2} – Mietwohnungs-Tracker`,14,290);
+      doc.text(`Seite ${i}/${doc.internal.getNumberOfPages()}`,180,290);
+    }
+    doc.save(`Steuer_${jahr}_${land}.pdf`);
+  }
+
+  function exportCSV(jahr) {
+    const w = state.activeWohnungObj();
+    const b = state.buchungen.filter(x=>x.datum?.startsWith(String(jahr)));
+    const rows = [['Datum','Typ','Kategorie','Betrag','Währung','Notiz'],
+      ...b.map(x=>[x.datum||'',x.typ==='einnahme'?'Einnahme':'Ausgabe',
+        x.kategorieLabel||x.kategorie,(x.betrag||0).toFixed(2),w.waehrung,
+        `"${(x.notiz||'').replace(/"/g,'""')}"`])
+    ];
+    const csv = rows.map(r=>r.join(';')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
+    a.download = `Buchungen_${jahr}.csv`; a.click();
+  }
+
+  // ── State helpers ──────────────────────────────────────────
+  state.activeWohnungObj = () => state.wohnungen.find(w=>w.id===state.activeWohnung)||{};
+  state.jahrBuchungen = () => state.buchungen.filter(b=>b.datum?.startsWith(String(state.jahr)));
+
+  // ── Render ─────────────────────────────────────────────────
+  function render() {
+    const root = document.getElementById('root');
+    if (state.user === undefined) { root.innerHTML = renderLoading(); return; }
+    if (!state.user) { root.innerHTML = renderLogin(); bindLogin(); return; }
+    switch(state.view) {
+      case 'wohnungen':   root.innerHTML = renderWohnungen();   bindWohnungen();  break;
+      case 'dashboard':   root.innerHTML = renderDashboard();   bindDashboard();  break;
+      case 'buchungen':   root.innerHTML = renderBuchungen();   bindBuchungen();  break;
+      case 'nebenkosten': root.innerHTML = renderNebenkosten(); bindNebenkosten();break;
+      case 'export':      root.innerHTML = renderExport();      bindExport();     break;
+    }
+  }
+
+  // ── Views ──────────────────────────────────────────────────
+  function renderLoading() {
+    return `<div class="loading-screen"><div class="spinner"></div></div>`;
+  }
+
+  function renderLogin() {
+    return `
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-logo">🏠</div>
+        <h1 class="login-title">Mietwohnungs-Tracker</h1>
+        <p class="login-sub">Einnahmen &amp; Ausgaben im Griff</p>
+        <div id="login-err" class="error-msg" style="display:none"></div>
+        <div class="field"><label>E-Mail</label>
+          <input id="l-email" type="email" placeholder="deine@email.de" autocomplete="email"/></div>
+        <div class="field"><label>Passwort</label>
+          <input id="l-pw" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+        <button id="l-submit" class="btn-primary" style="width:100%">Anmelden</button>
+        <button id="l-switch" class="login-switch">Noch kein Konto? Registrieren</button>
+      </div>
+    </div>`;
+  }
+
+  function bindLogin() {
+    let isReg = false;
+    $('l-switch').onclick = () => {
+      isReg = !isReg;
+      $('l-submit').textContent = isReg ? 'Konto erstellen' : 'Anmelden';
+      $('l-switch').textContent = isReg ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren';
+      $('l-pw').autocomplete = isReg ? 'new-password' : 'current-password';
+    };
+    $('l-submit').onclick = async () => {
+      const email = $('l-email').value, pw = $('l-pw').value;
+      const err = $('login-err');
+      err.style.display='none';
+      try {
+        if (isReg) await createUserWithEmailAndPassword(auth,email,pw);
+        else await signInWithEmailAndPassword(auth,email,pw);
+      } catch(e) {
+        const msgs = {
+          'auth/invalid-credential':'E-Mail oder Passwort falsch.',
+          'auth/user-not-found':'Kein Konto mit dieser E-Mail.',
+          'auth/wrong-password':'Falsches Passwort.',
+          'auth/email-already-in-use':'E-Mail bereits registriert.',
+          'auth/weak-password':'Passwort min. 6 Zeichen.',
+        };
+        err.textContent = msgs[e.code]||e.message;
+        err.style.display='block';
+      }
+    };
+  }
+
+  function renderWohnungen() {
+    const cards = state.wohnungen.map(w=>`
+      <div class="wohnung-card" data-id="${w.id}">
+        <div class="wohnung-icon">🏠</div>
+        <div class="wohnung-info">
+          <strong>${w.adresse}</strong>
+          <span class="badge">${w.waehrung}</span>
+          ${w.wohnflaeche?`<small>${w.wohnflaeche} m²</small>`:''}
+        </div>
+        <div class="arrow">›</div>
+      </div>`).join('');
+    return `
+    <div class="page">
+      <header class="page-header">
+        <div><h1>Meine Wohnungen</h1><p class="header-sub">Wähle eine Wohnung</p></div>
+        <button id="btn-logout" class="btn-ghost">Abmelden</button>
+      </header>
+      <div class="wohnungen-grid">
+        ${cards}
+        <button id="btn-add-wohnung" class="wohnung-add-btn"><span>+</span><span>Wohnung hinzufügen</span></button>
+      </div>
+      ${modalWohnung()}
+    </div>`;
+  }
+
+  function modalWohnung() {
+    return `
+    <div id="modal-wohnung" class="modal-overlay" style="display:none">
+      <div class="modal">
+        <h2>Neue Wohnung</h2>
+        <div class="field"><label>Adresse *</label><input id="w-adresse" placeholder="Musterstr. 1, 70173 Stuttgart"/></div>
+        <div class="field"><label>Währung *</label>
+          <select id="w-waehrung"><option value="EUR">Euro (€)</option><option value="CHF">Schweizer Franken (CHF)</option></select></div>
+        <div class="field"><label>Wohnfläche (m²)</label><input id="w-flaeche" type="number" placeholder="75"/></div>
+        <div class="field"><label>Dein Name (Vermieter)</label><input id="w-vname" placeholder="Max Mustermann"/></div>
+        <div class="field"><label>Deine Adresse</label><input id="w-vadresse" placeholder="Hauptstr. 10, 8001 Zürich"/></div>
+        <div class="modal-actions">
+          <button id="w-cancel" class="btn-ghost">Abbrechen</button>
+          <button id="w-save" class="btn-primary">Speichern</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function bindWohnungen() {
+    $('btn-logout').onclick = () => signOut(auth);
+    $('btn-add-wohnung').onclick = () => { $('modal-wohnung').style.display='flex'; };
+    $('w-cancel').onclick = () => { $('modal-wohnung').style.display='none'; };
+    $('modal-wohnung').onclick = e => { if(e.target===$('modal-wohnung')) $('modal-wohnung').style.display='none'; };
+    $('w-save').onclick = async () => {
+      const adresse = $('w-adresse').value.trim();
+      if (!adresse) return;
+      await addDoc(collection(db,'wohnungen'), {
+        adresse, waehrung:$('w-waehrung').value,
+        wohnflaeche:$('w-flaeche').value,
+        vermieterName:$('w-vname').value,
+        vermieterAdresse:$('w-vadresse').value,
+        userId:state.user.uid, createdAt:serverTimestamp()
+      });
+      $('modal-wohnung').style.display='none';
+    };
+    document.querySelectorAll('.wohnung-card').forEach(el => {
+      el.onclick = () => goTo('dashboard', el.dataset.id);
+    });
+  }
+
+  function navBar(active) {
+    const wId = state.activeWohnung;
+    const tabs = [
+      {v:'dashboard',   icon:'📊', label:'Dashboard'},
+      {v:'buchungen',   icon:'📋', label:'Buchungen'},
+      {v:'nebenkosten', icon:'💧', label:'Nebenkosten'},
+      {v:'export',      icon:'📄', label:'Export'},
+    ];
+    return `<div class="bottom-nav">${tabs.map(t=>`
+      <button class="nav-btn${active===t.v?' active':''}" data-view="${t.v}">${t.icon}<br/><span>${t.label}</span></button>`).join('')}
+    </div>`;
+  }
+
+  function bindNav() {
+    document.querySelectorAll('.nav-btn[data-view]').forEach(el=>{
+      el.onclick = () => goTo(el.dataset.view, state.activeWohnung);
+    });
+  }
+
+  // ── Dashboard ──────────────────────────────────────────────
+  function renderDashboard() {
+    const w = state.activeWohnungObj();
+    const jb = state.jahrBuchungen();
+    const sumEin = jb.filter(b=>b.typ==='einnahme').reduce((a,b)=>a+(b.betrag||0),0);
+    const sumAus = jb.filter(b=>b.typ==='ausgabe').reduce((a,b)=>a+(b.betrag||0),0);
+    const saldo = sumEin-sumAus;
+
+    // Monthly chart data
+    const mData = MONATE.map((m,i)=>{
+      const ms = `${state.jahr}-${String(i+1).padStart(2,'0')}`;
+      const e = state.buchungen.filter(b=>b.typ==='einnahme'&&b.datum?.startsWith(ms)).reduce((a,b)=>a+(b.betrag||0),0);
+      const a = state.buchungen.filter(b=>b.typ==='ausgabe'&&b.datum?.startsWith(ms)).reduce((a,b)=>a+(b.betrag||0),0);
+      return {m:m.substring(0,3),e,a};
+    });
+    const maxVal = Math.max(...mData.map(d=>Math.max(d.e,d.a)),1);
+
+    const bars = mData.map(d=>`
+      <div class="chart-col">
+        <div class="chart-bars">
+          <div class="bar bar-ein" style="height:${(d.e/maxVal)*100}%" title="${fmt(d.e,w.waehrung)}"></div>
+          <div class="bar bar-aus" style="height:${(d.a/maxVal)*100}%" title="${fmt(d.a,w.waehrung)}"></div>
+        </div>
+        <div class="chart-label">${d.m}</div>
+      </div>`).join('');
+
+    // Top Ausgaben
+    const katMap = {};
+    jb.filter(b=>b.typ==='ausgabe').forEach(b=>{ katMap[b.kategorie]=(katMap[b.kategorie]||0)+(b.betrag||0); });
+    const top = Object.entries(katMap).sort((a,b)=>b[1]-a[1]).slice(0,4);
+    const topMax = top[0]?.[1]||1;
+
+    const recent = state.buchungen.slice(0,5);
+
+    const yearOpts = [state.jahr+1,state.jahr,state.jahr-1,state.jahr-2].map(y=>
+      `<option value="${y}"${y===state.jahr?' selected':''}>${y}</option>`).join('');
+
+    return `
+    <div class="page">
+      <header class="page-header">
+        <div>
+          <button class="back-btn" id="btn-back">‹ Zurück</button>
+          <h1>${w.adresse||'Dashboard'}</h1>
+        </div>
+        <select id="sel-jahr" class="year-select">${yearOpts}</select>
+      </header>
+
+      <div class="kpi-row">
+        <div class="kpi-card kpi-ein"><div class="kpi-label">Einnahmen</div><div class="kpi-value">${fmt(sumEin,w.waehrung)}</div></div>
+        <div class="kpi-card kpi-aus"><div class="kpi-label">Ausgaben</div><div class="kpi-value">${fmt(sumAus,w.waehrung)}</div></div>
+        <div class="kpi-card ${saldo>=0?'kpi-pos':'kpi-neg'}"><div class="kpi-label">Saldo</div><div class="kpi-value">${fmt(saldo,w.waehrung)}</div></div>
+      </div>
+
+      <div class="card">
+        <div class="chart-legend"><span class="leg-ein">■ Einnahmen</span><span class="leg-aus">■ Ausgaben</span></div>
+        <div class="chart-wrap">${bars}</div>
+      </div>
+
+      ${top.length ? `<div class="card"><h3>Top Ausgaben ${state.jahr}</h3><div class="top-list">
+        ${top.map(([id,sum])=>`<div class="top-item">
+          <span class="top-label">${katLabel(id)}</span>
+          <div class="top-bar-wrap"><div class="top-bar" style="width:${(sum/topMax)*100}%"></div></div>
+          <span class="top-value">${fmt(sum,w.waehrung)}</span>
+        </div>`).join('')}
+      </div></div>` : ''}
+
+      <div class="card">
+        <div class="card-header"><h3>Letzte Buchungen</h3>
+          <button class="btn-link" id="btn-alle">Alle ›</button></div>
+        ${recent.length===0
+          ? '<p class="empty-state">Noch keine Buchungen.</p>'
+          : `<div class="buchungen-list">${recent.map(b=>`
+            <div class="buchung-row">
+              <div class="buchung-left">
+                <span class="typ-dot ${b.typ}"></span>
+                <div>
+                  <div class="buchung-notiz">${b.notiz||b.kategorieLabel||b.kategorie}</div>
+                  <div class="buchung-datum">${b.datum}</div>
+                </div>
+              </div>
+              <span class="buchung-betrag ${b.typ}">${b.typ==='einnahme'?'+':'-'}${fmt(b.betrag,w.waehrung)}</span>
+            </div>`).join('')}</div>`}
+      </div>
+
+      ${navBar('dashboard')}
+    </div>`;
+  }
+
+  function bindDashboard() {
+    bindNav();
+    $('btn-back').onclick = () => goTo('wohnungen');
+    $('sel-jahr').onchange = e => { state.jahr=Number(e.target.value); render(); };
+    $('btn-alle')?.onclick = () => goTo('buchungen', state.activeWohnung);
+  }
+
+  // ── Buchungen ──────────────────────────────────────────────
+  function renderBuchungen() {
+    const w = state.activeWohnungObj();
+    const yearOpts = [state.jahr+1,state.jahr,state.jahr-1,state.jahr-2].map(y=>
+      `<option value="${y}"${y===state.jahr?' selected':''}>${y}</option>`).join('');
+    const monatOpts = `<option value="alle">Alle Monate</option>`
+      + MONATE.map((m,i)=>`<option value="${i+1}"${String(i+1)===String(state.filterMonat)?' selected':''}>${m}</option>`).join('');
+
+    let filtered = state.buchungen.filter(b=>{
+      if (state.filterTyp!=='alle' && b.typ!==state.filterTyp) return false;
+      if (!b.datum?.startsWith(String(state.jahr))) return false;
+      if (state.filterMonat!=='alle') {
+        const ms = String(state.filterMonat).padStart(2,'0');
+        if (!b.datum?.startsWith(`${state.jahr}-${ms}`)) return false;
+      }
+      return true;
+    });
+
+    const sumEin = filtered.filter(b=>b.typ==='einnahme').reduce((a,b)=>a+(b.betrag||0),0);
+    const sumAus = filtered.filter(b=>b.typ==='ausgabe').reduce((a,b)=>a+(b.betrag||0),0);
+
+    const einKatOpts = EINNAHMEN_KAT.map(k=>`<option value="${k.id}">${k.icon} ${k.label}</option>`).join('');
+    const ausKatOpts = AUSGABEN_KAT.map(k=>`<option value="${k.id}">${k.icon} ${k.label}</option>`).join('');
+
+    return `
+    <div class="page">
+      <header class="page-header">
+        <div><button class="back-btn" id="btn-back">‹ Dashboard</button><h1>Buchungen</h1></div>
+        <button id="btn-new" class="btn-primary btn-sm">+ Neu</button>
+      </header>
+
+      <div class="filter-row">
+        <div class="seg-ctrl">
+          ${['alle','einnahme','ausgabe'].map(t=>`
+            <button class="seg-btn${state.filterTyp===t?' active':''}" data-typ="${t}">
+              ${t==='alle'?'Alle':t==='einnahme'?'Einnahmen':'Ausgaben'}
+            </button>`).join('')}
+        </div>
+        <div class="filter-selects">
+          <select id="sel-jahr">${yearOpts}</select>
+          <select id="sel-monat">${monatOpts}</select>
+        </div>
+      </div>
+
+      <div class="mini-saldo">
+        <span class="ein-sum">+ ${fmt(sumEin,w.waehrung)}</span>
+        <span class="divider">|</span>
+        <span class="aus-sum">- ${fmt(sumAus,w.waehrung)}</span>
+        <span class="divider">|</span>
+        <span class="saldo-sum ${sumEin-sumAus>=0?'pos':'neg'}">${fmt(sumEin-sumAus,w.waehrung)}</span>
+      </div>
+
+      <div class="buchungen-full-list">
+        ${filtered.length===0
+          ? `<div class="empty-state-big"><div>📋</div><p>Keine Buchungen gefunden</p>
+             <button id="btn-new2" class="btn-primary">Erste Buchung erfassen</button></div>`
+          : filtered.map(b=>`
+            <div class="buchung-item">
+              <div class="buchung-typ-bar ${b.typ}"></div>
+              <div class="buchung-content">
+                <div class="buchung-main">
+                  <span class="buchung-kat">${b.kategorieLabel||b.kategorie}</span>
+                  <span class="buchung-betrag-lg ${b.typ}">${b.typ==='einnahme'?'+':'-'}${fmt(b.betrag,w.waehrung)}</span>
+                </div>
+                ${b.notiz?`<div class="buchung-notiz-text">${b.notiz}</div>`:''}
+                <div class="buchung-meta">
+                  <span>${b.datum}</span>
+                  <button class="delete-btn" data-id="${b.id}">🗑</button>
+                </div>
+              </div>
+            </div>`).join('')}
+      </div>
+
+      <!-- Add Modal -->
+      <div id="modal-buchung" class="modal-overlay" style="display:none">
+        <div class="modal">
+          <h2>Neue Buchung</h2>
+          <div class="seg-ctrl mb">
+            <button class="seg-btn active" id="typ-ein" data-typ="einnahme">Einnahme</button>
+            <button class="seg-btn" id="typ-aus" data-typ="ausgabe">Ausgabe</button>
+          </div>
+          <div class="field"><label>Datum *</label><input id="b-datum" type="date" value="${today()}"/></div>
+          <div class="field"><label>Betrag (${w.waehrung}) *</label><input id="b-betrag" type="number" step="0.01" min="0" placeholder="0.00"/></div>
+          <div class="field"><label>Kategorie *</label>
+            <select id="b-kat">${einKatOpts}</select></div>
+          <div class="field"><label>Notiz</label><input id="b-notiz" placeholder="z.B. Januarmiete 2025"/></div>
+          <div class="modal-actions">
+            <button id="b-cancel" class="btn-ghost">Abbrechen</button>
+            <button id="b-save" class="btn-primary">Speichern</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete Confirm -->
+      <div id="modal-delete" class="modal-overlay" style="display:none">
+        <div class="modal modal-sm">
+          <h3>Buchung löschen?</h3>
+          <p>Diese Aktion kann nicht rückgängig gemacht werden.</p>
+          <div class="modal-actions">
+            <button id="del-cancel" class="btn-ghost">Abbrechen</button>
+            <button id="del-confirm" class="btn-danger">Löschen</button>
+          </div>
+        </div>
+      </div>
+
+      ${navBar('buchungen')}
+    </div>`;
+  }
+
+  function bindBuchungen() {
+    bindNav();
+    $('btn-back').onclick = () => goTo('dashboard', state.activeWohnung);
+    const openModal = () => { $('modal-buchung').style.display='flex'; };
+    $('btn-new').onclick = openModal;
+    $('btn-new2')?.onclick = openModal;
+    $('b-cancel').onclick = () => { $('modal-buchung').style.display='none'; };
+    $('modal-buchung').onclick = e => { if(e.target===$('modal-buchung')) $('modal-buchung').style.display='none'; };
+
+    let curTyp = 'einnahme';
+    const updateKat = (typ) => {
+      curTyp = typ;
+      const opts = (typ==='einnahme' ? EINNAHMEN_KAT : AUSGABEN_KAT)
+        .map(k=>`<option value="${k.id}">${k.icon} ${k.label}</option>`).join('');
+      $('b-kat').innerHTML = opts;
+      $('typ-ein').classList.toggle('active', typ==='einnahme');
+      $('typ-aus').classList.toggle('active', typ==='ausgabe');
+    };
+    $('typ-ein').onclick = () => updateKat('einnahme');
+    $('typ-aus').onclick = () => updateKat('ausgabe');
+
+    $('b-save').onclick = async () => {
+      const betrag = parseFloat($('b-betrag').value);
+      if (!betrag) return;
+      const katId = $('b-kat').value;
+      const kat = (curTyp==='einnahme'?EINNAHMEN_KAT:AUSGABEN_KAT).find(k=>k.id===katId);
+      await addDoc(collection(db,'buchungen'), {
+        typ:curTyp, datum:$('b-datum').value,
+        betrag, kategorie:katId, kategorieLabel:kat?.label||katId,
+        notiz:$('b-notiz').value,
+        wohnungId:state.activeWohnung, userId:state.user.uid,
+        createdAt:serverTimestamp()
+      });
+      $('modal-buchung').style.display='none';
+    };
+
+    document.querySelectorAll('.seg-btn[data-typ]').forEach(el=>{
+      el.onclick = () => { state.filterTyp=el.dataset.typ; render(); };
+    });
+    $('sel-jahr').onchange = e => { state.jahr=Number(e.target.value); render(); };
+    $('sel-monat').onchange = e => { state.filterMonat=e.target.value; render(); };
+
+    let deleteId = null;
+    document.querySelectorAll('.delete-btn[data-id]').forEach(el=>{
+      el.onclick = e => { e.stopPropagation(); deleteId=el.dataset.id; $('modal-delete').style.display='flex'; };
+    });
+    $('del-cancel').onclick = () => { $('modal-delete').style.display='none'; };
+    $('del-confirm').onclick = async () => {
+      if (deleteId) await deleteDoc(doc(db,'buchungen',deleteId));
+      $('modal-delete').style.display='none';
+    };
+  }
+
+  // ── Nebenkosten ────────────────────────────────────────────
+  function renderNebenkosten() {
+    const w = state.activeWohnungObj();
+    const m = state.mieter;
+    const jb = state.buchungen.filter(b=>b.datum?.startsWith(String(state.jahr)));
+    const betrKV = AUSGABEN_KAT.filter(k=>k.betrKV).map(k=>{
+      const sum = jb.filter(b=>b.typ==='ausgabe'&&b.kategorie===k.id).reduce((a,b)=>a+(b.betrag||0),0);
+      return {...k,sum};
+    }).filter(k=>k.sum>0);
+    const total = betrKV.reduce((a,k)=>a+k.sum,0);
+    const vz = jb.filter(b=>b.typ==='einnahme'&&b.kategorie==='nebenkosten_vz').reduce((a,b)=>a+(b.betrag||0),0)
+              || (m?.vorauszahlung ? m.vorauszahlung*12 : 0);
+    const saldo = vz-total;
+
+    const yearOpts = [state.jahr,state.jahr-1,state.jahr-2,state.jahr-3].map(y=>
+      `<option value="${y}"${y===state.jahr?' selected':''}>${y}</option>`).join('');
+
+    return `
+    <div class="page">
+      <header class="page-header">
+        <div><button class="back-btn" id="btn-back">‹ Dashboard</button><h1>Nebenkosten</h1></div>
+        <select id="sel-jahr" class="year-select">${yearOpts}</select>
+      </header>
+
+      <div class="card">
+        <div class="card-header"><h3>👤 Mieterdaten</h3>
+          <button class="btn-link" id="btn-mieter">${m?'Bearbeiten':'+ Hinzufügen'}</button></div>
+        ${m ? `<div class="mieter-info">
+          <div><strong>Name:</strong> ${m.name}</div>
+          ${m.einzug?`<div><strong>Einzug:</strong> ${m.einzug}</div>`:''}
+          ${m.vorauszahlung?`<div><strong>Monatl. VZ:</strong> ${fmt(m.vorauszahlung,w.waehrung)}</div>`:''}
+        </div>` : '<p class="empty-state">Keine Mieterdaten hinterlegt.</p>'}
+      </div>
+
+      <div class="card">
+        <h3>📋 Umlagefähige Kosten ${state.jahr}</h3>
+        <p class="card-sub">Gemäß § 2 BetrKV</p>
+        ${betrKV.length===0
+          ? '<p class="empty-state">Noch keine umlagefähigen Ausgaben erfasst.</p>'
+          : `<div class="nk-tabelle">
+              ${betrKV.map(k=>`<div class="nk-row">
+                <span class="nk-icon">${k.icon}</span>
+                <span class="nk-label">${k.label}</span>
+                <span class="nk-betrag">${fmt(k.sum,w.waehrung)}</span>
+              </div>`).join('')}
+              <div class="nk-total"><span>Gesamtkosten</span><span>${fmt(total,w.waehrung)}</span></div>
+            </div>`}
+      </div>
+
+      <div class="card">
+        <h3>⚖️ Abrechnung ${state.jahr}</h3>
+        <div class="abrechnung-box">
+          <div class="abr-row"><span>Gesamtkosten</span><span>${fmt(total,w.waehrung)}</span></div>
+          <div class="abr-row"><span>Vorauszahlungen</span><span>${fmt(vz,w.waehrung)}</span></div>
+          <div class="abr-row abr-saldo ${saldo>=0?'positiv':'negativ'}">
+            <strong>${saldo>=0?'✓ Guthaben Mieter':'⚠ Nachzahlung Mieter'}</strong>
+            <strong>${fmt(Math.abs(saldo),w.waehrung)}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📄 PDF erstellen</h3>
+        <button id="btn-nk-pdf" class="btn-primary btn-full" ${betrKV.length===0?'disabled':''}>
+          Nebenkostenabrechnung ${state.jahr} als PDF
+        </button>
+        ${betrKV.length===0?'<p class="hint">⚠ Erfasse zuerst umlagefähige Ausgaben.</p>':''}
+      </div>
+
+      <!-- Mieter Modal -->
+      <div id="modal-mieter" class="modal-overlay" style="display:none">
+        <div class="modal">
+          <h2>Mieterdaten</h2>
+          <div class="field"><label>Name *</label><input id="m-name" value="${m?.name||''}" placeholder="Max Mustermann"/></div>
+          <div class="field"><label>Einzugsdatum</label><input id="m-einzug" type="date" value="${m?.einzug||''}"/></div>
+          <div class="field"><label>Monatl. Vorauszahlung (${w.waehrung})</label>
+            <input id="m-vz" type="number" step="0.01" value="${m?.vorauszahlung||''}" placeholder="150.00"/></div>
+          <div class="modal-actions">
+            <button id="m-cancel" class="btn-ghost">Abbrechen</button>
+            <button id="m-save" class="btn-primary">Speichern</button>
+          </div>
+        </div>
+      </div>
+
+      ${navBar('nebenkosten')}
+    </div>`;
+  }
+
+  function bindNebenkosten() {
+    bindNav();
+    $('btn-back').onclick = () => goTo('dashboard', state.activeWohnung);
+    $('sel-jahr').onchange = e => { state.jahr=Number(e.target.value); render(); };
+    $('btn-mieter').onclick = () => { $('modal-mieter').style.display='flex'; };
+    $('m-cancel').onclick = () => { $('modal-mieter').style.display='none'; };
+    $('modal-mieter').onclick = e => { if(e.target===$('modal-mieter')) $('modal-mieter').style.display='none'; };
+    $('m-save').onclick = async () => {
+      const data = { name:$('m-name').value, einzug:$('m-einzug').value,
+        vorauszahlung:parseFloat($('m-vz').value)||0,
+        wohnungId:state.activeWohnung, userId:state.user.uid };
+      if (state.mieter) await updateDoc(doc(db,'mieter',state.mieter.id), data);
+      else await addDoc(collection(db,'mieter'), {...data, createdAt:serverTimestamp()});
+      $('modal-mieter').style.display='none';
+    };
+    $('btn-nk-pdf')?.onclick = () => exportNebenkostenPDF(state.jahr);
+  }
+
+  // ── Export ─────────────────────────────────────────────────
+  function renderExport() {
+    const w = state.activeWohnungObj();
+    const jb = state.buchungen.filter(b=>b.datum?.startsWith(String(state.jahr)));
+    const sumEin = jb.filter(b=>b.typ==='einnahme').reduce((a,b)=>a+(b.betrag||0),0);
+    const sumAus = jb.filter(b=>b.typ==='ausgabe').reduce((a,b)=>a+(b.betrag||0),0);
+    const yearOpts = [state.jahr,state.jahr-1,state.jahr-2,state.jahr-3].map(y=>
+      `<option value="${y}"${y===state.jahr?' selected':''}>${y}</option>`).join('');
+
+    return `
+    <div class="page">
+      <header class="page-header">
+        <div><button class="back-btn" id="btn-back">‹ Dashboard</button><h1>Export</h1></div>
+        <select id="sel-jahr" class="year-select">${yearOpts}</select>
+      </header>
+
+      <div class="card">
+        <h3>📊 Übersicht ${state.jahr}</h3>
+        <div class="export-overview">
+          <div class="exp-stat"><span>Buchungen</span><strong>${jb.length}</strong></div>
+          <div class="exp-stat"><span>Einnahmen</span><strong class="ein">${fmt(sumEin,w.waehrung)}</strong></div>
+          <div class="exp-stat"><span>Ausgaben</span><strong class="aus">${fmt(sumAus,w.waehrung)}</strong></div>
+          <div class="exp-stat"><span>Saldo</span><strong class="${sumEin-sumAus>=0?'ein':'aus'}">${fmt(sumEin-sumAus,w.waehrung)}</strong></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🧾 Steuererklärung PDF</h3>
+        <div class="field"><label>Steuerpflicht in</label>
+          <select id="sel-land">
+            <option value="de_bw">Deutschland – Baden-Württemberg</option>
+            <option value="ch">Schweiz</option>
+          </select></div>
+        <div class="field"><label>Ausgabe-Währung</label>
+          <select id="sel-ziel">
+            <option value="EUR">Euro (€)</option>
+            <option value="CHF">Schweizer Franken (CHF)</option>
+          </select></div>
+        <div id="kurs-wrap" class="field" style="display:none">
+          <label id="kurs-label">Wechselkurs</label>
+          <input id="inp-kurs" type="number" step="0.0001" value="1" placeholder="z.B. 0.95"/>
+          <small class="field-hint">Jahresdurchschnittskurs empfohlen (ESTV / Bundesbank)</small>
+        </div>
+        <button id="btn-steuer-pdf" class="btn-primary btn-full" ${jb.length===0?'disabled':''}>
+          Steuer-PDF ${state.jahr} erstellen
+        </button>
+      </div>
+
+      <div class="card">
+        <h3>📊 CSV Export</h3>
+        <p class="card-sub">Öffenbar in Excel oder Numbers</p>
+        <button id="btn-csv" class="btn-secondary btn-full" ${jb.length===0?'disabled':''}>
+          CSV herunterladen (${jb.length} Buchungen)
+        </button>
+      </div>
+
+      <div class="card">
+        <h3>💡 Steuerhinweise</h3>
+        <div class="steuer-hint-box">
+          <div class="hint-section">
+            <strong>🇩🇪 Deutschland (Baden-Württemberg)</strong>
+            <ul>
+              <li>Anlage V – Vermietung &amp; Verpachtung</li>
+              <li>Werbungskosten mindern das Einkommen</li>
+              <li>AfA auf Gebäude prüfen (2% pro Jahr)</li>
+            </ul>
+          </div>
+          <div class="hint-section" style="margin-top:10px">
+            <strong>🇨🇭 Schweiz</strong>
+            <ul>
+              <li>DBA DE–CH: Deutschland besteuert, CH rechnet an</li>
+              <li>Liegenschaftsunterhalt: Pauschale oder effektiv</li>
+              <li>Hypozinsen als Schuldzinsen abziehbar</li>
+            </ul>
+          </div>
+        </div>
+        <p class="disclaimer">⚠ Keine Steuerberatung. Bitte konsultiere einen Steuerberater.</p>
+      </div>
+
+      ${navBar('export')}
+    </div>`;
+  }
+
+  function bindExport() {
+    bindNav();
+    $('btn-back').onclick = () => goTo('dashboard', state.activeWohnung);
+    $('sel-jahr').onchange = e => { state.jahr=Number(e.target.value); render(); };
+
+    const checkKurs = () => {
+      const w = state.activeWohnungObj();
+      const ziel = $('sel-ziel').value;
+      const braucht = w.waehrung && w.waehrung !== ziel;
+      $('kurs-wrap').style.display = braucht ? 'block' : 'none';
+      $('kurs-label').textContent = `Wechselkurs: 1 ${w.waehrung} = ? ${ziel}`;
+    };
+    $('sel-ziel').onchange = checkKurs;
+    checkKurs();
+
+    $('btn-steuer-pdf').onclick = () => {
+      exportSteuerPDF(state.jahr, $('sel-land').value, $('sel-ziel').value, parseFloat($('inp-kurs')?.value)||1);
+    };
+    $('btn-csv').onclick = () => exportCSV(state.jahr);
+  }
+
+  // ── Boot ───────────────────────────────────────────────────
+  render();
+</script>
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1a2744;--navy-md:#2c3e6b;--blue:#5b8fb9;--blue-lt:#e8f0f8;
+  --green:#2d7d5e;--green-lt:#e6f5ee;--red:#c0392b;--red-lt:#fdecea;
+  --amber:#d97706;--gray-1:#f8f9fb;--gray-2:#eef0f4;--gray-3:#d1d5de;
+  --gray-4:#8b93a5;--gray-5:#4a5568;--text:#1a202c;
+  --radius:12px;--shadow:0 2px 8px rgba(26,39,68,.10);
+  --shadow-md:0 4px 20px rgba(26,39,68,.14);--nav-h:64px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:var(--font);background:var(--gray-1);color:var(--text);min-height:100dvh;-webkit-font-smoothing:antialiased}
+button{font-family:var(--font);cursor:pointer;border:none;background:none}
+input,select{font-family:var(--font)}
+
+.loading-screen{display:flex;align-items:center;justify-content:center;min-height:100dvh}
+.spinner{width:36px;height:36px;border:3px solid var(--gray-2);border-top-color:var(--navy);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.login-container{min-height:100dvh;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(145deg,var(--navy) 0%,var(--navy-md) 100%);padding:24px}
+.login-card{background:#fff;border-radius:20px;padding:40px 32px;width:100%;max-width:380px;
+  box-shadow:var(--shadow-md);text-align:center}
+.login-logo{font-size:48px;margin-bottom:12px}
+.login-title{font-size:22px;font-weight:700;color:var(--navy)}
+.login-sub{font-size:13px;color:var(--gray-4);margin-top:4px;margin-bottom:28px}
+.login-switch{margin-top:16px;font-size:13px;color:var(--blue);text-decoration:underline;display:block;width:100%;text-align:center}
+
+.page{max-width:600px;margin:0 auto;padding:0 0 calc(var(--nav-h) + 16px);min-height:100dvh}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;
+  padding:20px 16px 12px;position:sticky;top:0;z-index:10;background:var(--gray-1)}
+.page-header h1{font-size:22px;font-weight:700;color:var(--navy);line-height:1.2}
+.header-sub{font-size:12px;color:var(--gray-4);margin-top:2px}
+.back-btn{font-size:12px;color:var(--blue);margin-bottom:4px;display:block}
+
+.card{background:#fff;border-radius:var(--radius);padding:16px;margin:0 12px 12px;box-shadow:var(--shadow)}
+.card h3{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:12px}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.card-header h3{margin-bottom:0}
+.card-sub{font-size:12px;color:var(--gray-4);margin-top:-8px;margin-bottom:12px}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--gray-5);
+  margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.field input,.field select{width:100%;padding:11px 13px;border:1.5px solid var(--gray-3);
+  border-radius:8px;font-size:15px;color:var(--text);background:var(--gray-1);
+  transition:border-color .15s;-webkit-appearance:none}
+.field input:focus,.field select:focus{outline:none;border-color:var(--blue);background:#fff}
+.field-hint{display:block;font-size:11px;color:var(--gray-4);margin-top:4px}
+
+.btn-primary{background:var(--navy);color:#fff;padding:13px 20px;border-radius:10px;
+  font-size:15px;font-weight:600;transition:background .15s,transform .1s}
+.btn-primary:active{transform:scale(.98)}
+.btn-primary:disabled{background:var(--gray-3);cursor:not-allowed}
+.btn-primary.btn-full{width:100%}
+.btn-primary.btn-sm{padding:8px 14px;font-size:13px}
+.btn-secondary{background:var(--blue-lt);color:var(--navy);padding:13px 20px;
+  border-radius:10px;font-size:15px;font-weight:600}
+.btn-secondary.btn-full{width:100%}
+.btn-secondary:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:none;color:var(--navy-md);padding:10px 16px;border-radius:8px;
+  font-size:14px;border:1.5px solid var(--gray-3)}
+.btn-danger{background:var(--red);color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600}
+.btn-link{background:none;color:var(--blue);font-size:13px;font-weight:500}
+
+.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 12px 12px}
+.kpi-card{background:#fff;border-radius:var(--radius);padding:12px 10px;box-shadow:var(--shadow);text-align:center}
+.kpi-label{font-size:10px;color:var(--gray-4);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+.kpi-value{font-size:13px;font-weight:700;color:var(--navy)}
+.kpi-ein{border-top:3px solid var(--green)}.kpi-aus{border-top:3px solid var(--red)}
+.kpi-pos{border-top:3px solid var(--green)}.kpi-pos .kpi-value{color:var(--green)}
+.kpi-neg{border-top:3px solid var(--red)}.kpi-neg .kpi-value{color:var(--red)}
+
+/* Chart */
+.chart-legend{display:flex;gap:16px;font-size:11px;margin-bottom:10px}
+.leg-ein{color:var(--green);font-weight:600}.leg-aus{color:var(--red);font-weight:600}
+.chart-wrap{display:flex;align-items:flex-end;gap:3px;height:120px;overflow:hidden}
+.chart-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:1px}
+.chart-bars{display:flex;gap:1px;align-items:flex-end;width:100%;justify-content:center;height:100px}
+.bar{width:45%;border-radius:2px 2px 0 0;min-height:2px}
+.bar-ein{background:var(--green)}.bar-aus{background:var(--red)}
+.chart-label{font-size:8px;color:var(--gray-4);margin-top:3px;text-align:center}
+
+.top-list{display:flex;flex-direction:column;gap:10px}
+.top-item{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:center;font-size:12px}
+.top-label{color:var(--gray-5);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-bar-wrap{height:6px;background:var(--gray-2);border-radius:3px;overflow:hidden}
+.top-bar{height:100%;background:var(--navy);border-radius:3px}
+.top-value{font-weight:700;color:var(--navy);font-size:12px;text-align:right}
+
+.wohnungen-grid{padding:0 12px;display:flex;flex-direction:column;gap:10px}
+.wohnung-card{background:#fff;border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:14px;cursor:pointer;transition:transform .1s,box-shadow .1s;
+  border:1.5px solid transparent}
+.wohnung-card:hover{transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.wohnung-icon{font-size:28px}.wohnung-info{flex:1}
+.wohnung-info strong{display:block;font-size:15px;color:var(--navy)}
+.wohnung-info small{font-size:12px;color:var(--gray-4)}
+.badge{display:inline-block;background:var(--blue-lt);color:var(--navy);font-size:11px;
+  font-weight:700;padding:2px 7px;border-radius:99px;margin-top:3px}
+.arrow{font-size:22px;color:var(--gray-3)}
+.wohnung-add-btn{background:var(--gray-1);border:2px dashed var(--gray-3);border-radius:var(--radius);
+  padding:20px;display:flex;flex-direction:column;align-items:center;gap:4px;
+  color:var(--gray-4);font-size:14px;cursor:pointer;transition:border-color .15s,color .15s}
+.wohnung-add-btn span:first-child{font-size:24px}
+.wohnung-add-btn:hover{border-color:var(--blue);color:var(--blue)}
+
+.buchungen-list{display:flex;flex-direction:column;gap:8px}
+.buchung-row{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--gray-2)}
+.buchung-row:last-child{border-bottom:none}
+.buchung-left{display:flex;align-items:center;gap:10px}
+.typ-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.typ-dot.einnahme{background:var(--green)}.typ-dot.ausgabe{background:var(--red)}
+.buchung-notiz{font-size:13px;font-weight:500;color:var(--text)}
+.buchung-datum{font-size:11px;color:var(--gray-4)}
+.buchung-betrag{font-size:14px;font-weight:700}
+.buchung-betrag.einnahme{color:var(--green)}.buchung-betrag.ausgabe{color:var(--red)}
+
+.filter-row{padding:0 12px 8px;display:flex;flex-direction:column;gap:8px}
+.seg-ctrl{display:flex;background:var(--gray-2);border-radius:8px;padding:3px}
+.seg-btn{flex:1;padding:7px;border-radius:6px;font-size:12px;font-weight:600;
+  color:var(--gray-4);transition:all .15s}
+.seg-btn.active{background:#fff;color:var(--navy);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.seg-ctrl.mb{margin-bottom:12px}
+.filter-selects{display:flex;gap:8px}
+.filter-selects select{flex:1;padding:8px 10px;border:1.5px solid var(--gray-3);
+  border-radius:8px;font-size:13px;background:#fff;-webkit-appearance:none}
+.mini-saldo{padding:8px 12px;margin:0 12px 8px;background:#fff;border-radius:8px;
+  box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;font-size:13px;font-weight:700}
+.ein-sum{color:var(--green)}.aus-sum{color:var(--red)}
+.saldo-sum.pos{color:var(--green)}.saldo-sum.neg{color:var(--red)}.divider{color:var(--gray-3)}
+
+.buchungen-full-list{padding:0 12px;display:flex;flex-direction:column;gap:8px}
+.buchung-item{background:#fff;border-radius:var(--radius);display:flex;overflow:hidden;box-shadow:var(--shadow)}
+.buchung-typ-bar{width:4px;flex-shrink:0}
+.buchung-typ-bar.einnahme{background:var(--green)}.buchung-typ-bar.ausgabe{background:var(--red)}
+.buchung-content{flex:1;padding:12px}
+.buchung-main{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+.buchung-kat{font-size:13px;font-weight:600;color:var(--navy)}
+.buchung-betrag-lg{font-size:15px;font-weight:700}
+.buchung-betrag-lg.einnahme{color:var(--green)}.buchung-betrag-lg.ausgabe{color:var(--red)}
+.buchung-notiz-text{font-size:12px;color:var(--gray-5);margin-bottom:4px}
+.buchung-meta{display:flex;justify-content:space-between;align-items:center}
+.buchung-meta span{font-size:11px;color:var(--gray-4)}
+.delete-btn{font-size:14px;padding:2px 4px;color:var(--gray-4)}
+.delete-btn:hover{color:var(--red)}
+
+.mieter-info{font-size:14px;display:flex;flex-direction:column;gap:4px}
+.nk-tabelle{display:flex;flex-direction:column}
+.nk-row{display:flex;align-items:center;gap:10px;padding:8px 0;
+  border-bottom:1px solid var(--gray-2);font-size:13px}
+.nk-icon{font-size:16px;width:24px;text-align:center}
+.nk-label{flex:1;color:var(--gray-5)}.nk-betrag{font-weight:700;color:var(--navy)}
+.nk-total{display:flex;justify-content:space-between;padding:10px 0 0;font-size:14px;font-weight:700;color:var(--navy)}
+.abrechnung-box{border-radius:8px;overflow:hidden;border:1.5px solid var(--gray-2)}
+.abr-row{display:flex;justify-content:space-between;padding:11px 14px;
+  font-size:14px;border-bottom:1px solid var(--gray-2)}
+.abr-row:last-child{border-bottom:none}
+.abr-saldo{font-size:15px}
+.abr-saldo.positiv{background:var(--green-lt);color:var(--green)}
+.abr-saldo.negativ{background:var(--red-lt);color:var(--red)}
+
+.export-overview{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.exp-stat{background:var(--gray-1);border-radius:8px;padding:10px 12px}
+.exp-stat span{display:block;font-size:11px;color:var(--gray-4);font-weight:600;text-transform:uppercase;margin-bottom:2px}
+.exp-stat strong{font-size:15px;color:var(--navy)}
+.exp-stat strong.ein{color:var(--green)}.exp-stat strong.aus{color:var(--red)}
+.steuer-hint-box{display:flex;flex-direction:column}
+.hint-section strong{display:block;font-size:13px;margin-bottom:6px;color:var(--navy)}
+.hint-section ul{padding-left:16px}
+.hint-section ul li{font-size:12px;color:var(--gray-5);margin-bottom:3px}
+.disclaimer{font-size:11px;color:var(--amber);margin-top:12px;padding:8px;background:#fffbeb;border-radius:6px}
+
+.year-select{padding:6px 10px;border:1.5px solid var(--gray-3);border-radius:8px;
+  font-size:13px;font-weight:600;background:#fff;color:var(--navy);-webkit-appearance:none}
+
+.modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.5);
+  display:flex;align-items:flex-end;justify-content:center}
+.modal{background:#fff;border-radius:20px 20px 0 0;padding:24px 20px 36px;
+  width:100%;max-width:600px;max-height:90dvh;overflow-y:auto}
+.modal.modal-sm{max-height:40dvh}
+.modal h2{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:20px}
+.modal h3{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px}
+.modal p{font-size:14px;color:var(--gray-5);margin-bottom:16px}
+.modal-actions{display:flex;gap:10px;margin-top:16px}
+.modal-actions .btn-ghost{flex:1}.modal-actions .btn-primary{flex:2}
+.modal-actions .btn-danger{flex:1}
+
+.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:600px;background:#fff;border-top:1px solid var(--gray-2);
+  display:flex;height:var(--nav-h);padding-bottom:env(safe-area-inset-bottom);
+  z-index:50;box-shadow:0 -2px 10px rgba(0,0,0,.06)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1px;font-size:10px;font-weight:600;color:var(--gray-4);padding:8px 4px;transition:color .15s}
+.nav-btn.active{color:var(--navy)}
+
+.empty-state{font-size:13px;color:var(--gray-4);padding:8px 0}
+.empty-state-big{display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px 20px;text-align:center}
+.empty-state-big div{font-size:40px}
+.empty-state-big p{font-size:14px;color:var(--gray-4)}
+.hint{font-size:12px;color:var(--amber);margin-top:8px}
+.error-msg{background:var(--red-lt);color:var(--red);padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px}
+
+@supports (padding: env(safe-area-inset-top)){
+  .page-header{padding-top:max(20px,env(safe-area-inset-top))}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+</body>
+</html>
