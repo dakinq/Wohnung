@@ -576,14 +576,14 @@
     <div id="page-darlehen" class="page hidden">
       <div class="stack">
 
-        <!-- Eingabe-Karte -->
+        <!-- Kaufpreis & Nebenkosten -->
         <div class="card" style="padding:1.25rem;">
-          <h3 style="margin-bottom:1rem;">Darlehen konfigurieren</h3>
+          <h3 style="margin-bottom:1rem;">Kaufpreis & Nebenkosten</h3>
           <div class="stack">
             <div class="row" style="gap:.75rem;">
               <div class="form-group" style="flex:1;">
                 <label for="d-kaufpreis">Kaufpreis</label>
-                <input id="d-kaufpreis" type="number" inputmode="decimal" placeholder="400000" min="0" step="1000" oninput="App.darlehen.onBasisChange()" />
+                <input id="d-kaufpreis" type="number" inputmode="decimal" placeholder="400000" min="0" step="1000" oninput="App.darlehen.onKaufpreisChange()" />
               </div>
               <div class="form-group" style="width:90px;">
                 <label for="d-waehrung">Wahrung</label>
@@ -593,10 +593,70 @@
                 </select>
               </div>
             </div>
+
+            <!-- Nebenkosten -->
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+              <div style="padding:.75rem 1rem;border-bottom:1px solid var(--border);">
+                <div class="row-between" style="margin-bottom:.4rem;">
+                  <label style="margin:0;font-size:.8125rem;">Grunderwerbsteuer</label>
+                  <span class="text-xs muted tabular" id="d-gst-summe">—</span>
+                </div>
+                <div class="row" style="gap:.5rem;">
+                  <input id="d-gst-pct" type="number" inputmode="decimal" placeholder="3.5" min="0" max="10" step="0.1" style="width:72px;flex-shrink:0;" oninput="App.darlehen.onNebenkostenPctChange('gst')" />
+                  <span class="text-xs muted" style="align-self:center;">%</span>
+                  <input id="d-gst-abs" type="number" inputmode="decimal" placeholder="Betrag" min="0" step="100" style="flex:1;" oninput="App.darlehen.onNebenkostenAbsChange('gst')" />
+                </div>
+              </div>
+              <div style="padding:.75rem 1rem;border-bottom:1px solid var(--border);">
+                <div class="row-between" style="margin-bottom:.4rem;">
+                  <label style="margin:0;font-size:.8125rem;">Maklerprovision</label>
+                  <span class="text-xs muted tabular" id="d-makler-summe">—</span>
+                </div>
+                <div class="row" style="gap:.5rem;">
+                  <input id="d-makler-pct" type="number" inputmode="decimal" placeholder="3.57" min="0" max="10" step="0.01" style="width:72px;flex-shrink:0;" oninput="App.darlehen.onNebenkostenPctChange('makler')" />
+                  <span class="text-xs muted" style="align-self:center;">%</span>
+                  <input id="d-makler-abs" type="number" inputmode="decimal" placeholder="Betrag" min="0" step="100" style="flex:1;" oninput="App.darlehen.onNebenkostenAbsChange('makler')" />
+                </div>
+              </div>
+              <div style="padding:.75rem 1rem;">
+                <div class="row-between" style="margin-bottom:.4rem;">
+                  <label style="margin:0;font-size:.8125rem;">Notar & Grundbuch</label>
+                  <span class="text-xs muted tabular" id="d-notar-summe">—</span>
+                </div>
+                <div class="row" style="gap:.5rem;">
+                  <input id="d-notar-pct" type="number" inputmode="decimal" placeholder="2.0" min="0" max="10" step="0.1" style="width:72px;flex-shrink:0;" oninput="App.darlehen.onNebenkostenPctChange('notar')" />
+                  <span class="text-xs muted" style="align-self:center;">%</span>
+                  <input id="d-notar-abs" type="number" inputmode="decimal" placeholder="Betrag" min="0" step="100" style="flex:1;" oninput="App.darlehen.onNebenkostenAbsChange('notar')" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Summen -->
+            <div style="background:var(--accent-l);border-radius:8px;padding:.75rem 1rem;">
+              <div class="row-between" style="font-size:.8125rem;margin-bottom:.2rem;">
+                <span class="muted">Kaufpreis</span><span id="d-sum-kaufpreis" class="tabular">—</span>
+              </div>
+              <div class="row-between" style="font-size:.8125rem;margin-bottom:.4rem;">
+                <span class="muted">Nebenkosten</span><span id="d-sum-nebenkosten" class="tabular">—</span>
+              </div>
+              <div class="row-between" style="font-weight:600;border-top:1px solid var(--border);padding-top:.4rem;">
+                <span>Gesamtbedarf</span><span id="d-sum-gesamt" class="tabular">—</span>
+              </div>
+            </div>
+
+            <!-- Eigenkapital -->
             <div class="form-group">
               <label for="d-eigenkapital">Eigenkapital</label>
               <input id="d-eigenkapital" type="number" inputmode="decimal" placeholder="100000" min="0" step="1000" oninput="App.darlehen.onBasisChange()" />
+              <div class="text-xs muted" id="d-ek-hint" style="margin-top:.3rem;"></div>
             </div>
+          </div>
+        </div>
+
+        <!-- Finanzierung -->
+        <div class="card" style="padding:1.25rem;">
+          <h3 style="margin-bottom:1rem;">Finanzierung</h3>
+          <div class="stack">
             <div class="row" style="gap:.75rem;">
               <div class="form-group" style="flex:1;">
                 <label for="d-zinssatz">Zinssatz % p.a.</label>
@@ -618,9 +678,9 @@
                 <input id="d-startdatum" type="date" onchange="App.darlehen.recalc()" />
               </div>
               <div class="form-group" style="flex:1;">
-                <label for="d-erste-rate">Erste Rate</label>
-                <input id="d-erste-rate" type="number" inputmode="decimal" placeholder="anteilig" min="0" step="10" oninput="App.darlehen.recalc()" />
-                <div class="text-xs muted" style="margin-top:.3rem;">Leer = volle Rate</div>
+                <label for="d-erste-zinsen">Zinsen 1. Rate</label>
+                <input id="d-erste-zinsen" type="number" inputmode="decimal" placeholder="anteilig" min="0" step="1" oninput="App.darlehen.recalc()" />
+                <div class="text-xs muted" style="margin-top:.3rem;">Leer = voller Monat</div>
               </div>
             </div>
             <div id="d-save-row" class="hidden">
@@ -1256,7 +1316,7 @@ const App = {
     },
 
     // Tilgungsplan als Array berechnen (mit fixer Annuitat, erster Rate und Sondertilgungen)
-    tilgungsplan(darlehen, zinsSatz, annuitaetMonatlich, startDatum, ersteRate, sondertilgungen) {
+    tilgungsplan(darlehen, zinsSatz, annuitaetMonatlich, startDatum, ersteZinsen, sondertilgungen) {
       const r = zinsSatz / 100 / 12;
       const maxMonate = this.laufzeitMonate(darlehen, zinsSatz, annuitaetMonatlich);
       if (!maxMonate) return [];
@@ -1271,10 +1331,9 @@ const App = {
 
       for (let i = 0; i < maxMonate * 2 && restschuld > 0.005; i++) {
         const monatKey = `${sy}-${String(sm).padStart(2,'0')}`;
-        const zinsen   = restschuld * r;
-
-        // Erste Rate anteilig falls angegeben
-        const rate     = (i === 0 && ersteRate > 0) ? ersteRate : annuitaetMonatlich;
+        // Erste Rate: Zinsen sind anteilig, Tilgung = Annuitat - ersteZinsen
+        const zinsen   = (i === 0 && ersteZinsen > 0) ? ersteZinsen : restschuld * r;
+        const rate     = annuitaetMonatlich;
         const tilgung  = Math.min(rate - zinsen, restschuld);
         restschuld     = Math.max(0, restschuld - tilgung);
 
@@ -1312,10 +1371,25 @@ const App = {
       const zinsSatz     = parseFloat(document.getElementById('d-zinssatz').value)     || 0;
       const tilgungsSatz = parseFloat(document.getElementById('d-tilgungssatz').value) || 0;
       const annuitaet    = parseFloat(document.getElementById('d-annuitaet').value)    || 0;
-      const ersteRate    = parseFloat(document.getElementById('d-erste-rate').value)   || 0;
+      const ersteZinsen  = parseFloat(document.getElementById('d-erste-zinsen').value) || 0;
       const startDatum   = document.getElementById('d-startdatum').value;
       const waehrung     = document.getElementById('d-waehrung').value;
-      return { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, ersteRate, startDatum, waehrung };
+      const gstPct       = parseFloat(document.getElementById('d-gst-pct').value)      || 0;
+      const gstAbs       = parseFloat(document.getElementById('d-gst-abs').value)      || 0;
+      const maklerPct    = parseFloat(document.getElementById('d-makler-pct').value)   || 0;
+      const maklerAbs    = parseFloat(document.getElementById('d-makler-abs').value)   || 0;
+      const notarPct     = parseFloat(document.getElementById('d-notar-pct').value)    || 0;
+      const notarAbs     = parseFloat(document.getElementById('d-notar-abs').value)    || 0;
+      // Absoluter Betrag hat Vorrang; sonst aus Prozent berechnen
+      const gst          = gstAbs    || (kaufpreis * gstPct    / 100);
+      const makler       = maklerAbs || (kaufpreis * maklerPct / 100);
+      const notar        = notarAbs  || (kaufpreis * notarPct  / 100);
+      const nebenkosten  = gst + makler + notar;
+      const gesamtbedarf = kaufpreis + nebenkosten;
+      const darlehen     = Math.max(0, gesamtbedarf - eigenkapital);
+      return { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, ersteZinsen,
+               startDatum, waehrung, gstPct, gstAbs, maklerPct, maklerAbs, notarPct, notarAbs,
+               gst, makler, notar, nebenkosten, gesamtbedarf, darlehen };
     },
 
     // Seite oeffnen: Felder aus gespeicherter Konfig fuellen
@@ -1327,9 +1401,15 @@ const App = {
         document.getElementById('d-zinssatz').value     = c.zinsSatz     || '';
         document.getElementById('d-tilgungssatz').value = c.tilgungsSatz || '';
         document.getElementById('d-annuitaet').value    = c.annuitaet    || '';
-        document.getElementById('d-erste-rate').value   = c.ersteRate    || '';
+        document.getElementById('d-erste-zinsen').value = c.ersteZinsen  || '';
         document.getElementById('d-startdatum').value   = c.startDatum   || '';
         document.getElementById('d-waehrung').value     = c.waehrung     || 'EUR';
+        document.getElementById('d-gst-pct').value      = c.gstPct       || '';
+        document.getElementById('d-gst-abs').value      = c.gstAbs       || '';
+        document.getElementById('d-makler-pct').value   = c.maklerPct    || '';
+        document.getElementById('d-makler-abs').value   = c.maklerAbs    || '';
+        document.getElementById('d-notar-pct').value    = c.notarPct     || '';
+        document.getElementById('d-notar-abs').value    = c.notarAbs     || '';
       } else {
         document.getElementById('d-startdatum').value = todayISO().substring(0, 8) + '01';
       }
@@ -1337,10 +1417,39 @@ const App = {
       this.recalc();
     },
 
-    // Kaufpreis oder Eigenkapital geandert: Annuitat aus Tilgungssatz neu berechnen
+    // Kaufpreis geandert: Abs-Felder aus Pct neu berechnen, dann recalc
+    onKaufpreisChange() {
+      const kaufpreis = parseFloat(document.getElementById('d-kaufpreis').value) || 0;
+      ['gst', 'makler', 'notar'].forEach(k => {
+        const pct = parseFloat(document.getElementById(`d-${k}-pct`).value) || 0;
+        if (pct && kaufpreis) {
+          document.getElementById(`d-${k}-abs`).value = (kaufpreis * pct / 100).toFixed(0);
+        }
+      });
+      this.onBasisChange();
+    },
+
+    // Prozentwert eingegeben: Absoluten Betrag berechnen
+    onNebenkostenPctChange(key) {
+      const kaufpreis = parseFloat(document.getElementById('d-kaufpreis').value) || 0;
+      const pct       = parseFloat(document.getElementById(`d-${key}-pct`).value) || 0;
+      if (kaufpreis && pct) {
+        document.getElementById(`d-${key}-abs`).value = (kaufpreis * pct / 100).toFixed(0);
+      }
+      this.recalc();
+    },
+
+    // Absoluter Betrag eingegeben: Prozent berechnen
+    onNebenkostenAbsChange(key) {
+      const kaufpreis = parseFloat(document.getElementById('d-kaufpreis').value) || 0;
+      const abs       = parseFloat(document.getElementById(`d-${key}-abs`).value) || 0;
+      if (kaufpreis && abs) {
+        document.getElementById(`d-${key}-pct`).value = (abs / kaufpreis * 100).toFixed(2);
+      }
+      this.recalc();
+    },
     onBasisChange() {
-      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz } = this.readForm();
-      const darlehen = kaufpreis - eigenkapital;
+      const { darlehen, zinsSatz, tilgungsSatz } = this.readForm();
       if (darlehen > 0 && zinsSatz > 0 && tilgungsSatz > 0) {
         const ann = darlehen * (zinsSatz + tilgungsSatz) / 100 / 12;
         document.getElementById('d-annuitaet').value = ann.toFixed(2);
@@ -1350,10 +1459,8 @@ const App = {
 
     // Zinssatz geandert: Tilgungssatz neu berechnen falls Annuitat bekannt
     onZinsChange() {
-      const { kaufpreis, eigenkapital, zinsSatz, annuitaet } = this.readForm();
-      const darlehen = kaufpreis - eigenkapital;
+      const { darlehen, zinsSatz, annuitaet } = this.readForm();
       if (darlehen > 0 && annuitaet > 0 && zinsSatz > 0) {
-        // Tilgungsanteil = Annuitat - Monatszinsen; hochrechnen auf % p.a.
         const monatZins = darlehen * (zinsSatz / 100 / 12);
         const monatTilg = annuitaet - monatZins;
         if (monatTilg > 0) {
@@ -1366,8 +1473,7 @@ const App = {
 
     // Tilgungssatz geandert: Annuitat berechnen
     onTilgungssatzChange() {
-      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz } = this.readForm();
-      const darlehen = kaufpreis - eigenkapital;
+      const { darlehen, zinsSatz, tilgungsSatz } = this.readForm();
       if (darlehen > 0 && zinsSatz > 0 && tilgungsSatz > 0) {
         const ann = darlehen * (zinsSatz + tilgungsSatz) / 100 / 12;
         document.getElementById('d-annuitaet').value = ann.toFixed(2);
@@ -1377,8 +1483,7 @@ const App = {
 
     // Annuitat direkt eingegeben: Tilgungssatz berechnen
     onAnnuitaetChange() {
-      const { kaufpreis, eigenkapital, zinsSatz, annuitaet } = this.readForm();
-      const darlehen = kaufpreis - eigenkapital;
+      const { darlehen, zinsSatz, annuitaet } = this.readForm();
       if (darlehen > 0 && zinsSatz > 0 && annuitaet > 0) {
         const monatZins = darlehen * (zinsSatz / 100 / 12);
         const monatTilg = annuitaet - monatZins;
@@ -1394,23 +1499,37 @@ const App = {
 
     // Neuberechnung und Dashboard aktualisieren
     recalc() {
-      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, ersteRate, startDatum, waehrung } = this.readForm();
-      const darlehen = kaufpreis - eigenkapital;
+      const f = this.readForm();
+      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, ersteZinsen,
+              startDatum, waehrung, gst, makler, notar, nebenkosten, gesamtbedarf, darlehen } = f;
 
       document.getElementById('d-save-row').classList.remove('hidden');
 
-      const errEl  = document.getElementById('d-msg');
-      const hint   = document.getElementById('d-annuitaet-hint');
+      // Nebenkosten-Summen aktualisieren
+      document.getElementById('d-gst-summe').textContent    = kaufpreis ? fmt(gst, waehrung)    : '—';
+      document.getElementById('d-makler-summe').textContent = kaufpreis ? fmt(makler, waehrung) : '—';
+      document.getElementById('d-notar-summe').textContent  = kaufpreis ? fmt(notar, waehrung)  : '—';
+      document.getElementById('d-sum-kaufpreis').textContent   = kaufpreis ? fmt(kaufpreis, waehrung)   : '—';
+      document.getElementById('d-sum-nebenkosten').textContent = kaufpreis ? fmt(nebenkosten, waehrung) : '—';
+      document.getElementById('d-sum-gesamt').textContent      = kaufpreis ? fmt(gesamtbedarf, waehrung) : '—';
 
-      // Hint: Tilgungsanteil in aktueller Annuitat anzeigen
+      // EK-Hint: Eigenkapitalquote
+      const ekEl = document.getElementById('d-ek-hint');
+      if (eigenkapital > 0 && gesamtbedarf > 0) {
+        const ekPct = (eigenkapital / gesamtbedarf * 100).toFixed(1);
+        ekEl.textContent = `${ekPct} % des Gesamtbedarfs · Darlehen: ${fmt(darlehen, waehrung)}`;
+      } else { ekEl.textContent = ''; }
+
+      const errEl = document.getElementById('d-msg');
+      const hint  = document.getElementById('d-annuitaet-hint');
+
+      // Annuitat-Hint
       if (darlehen > 0 && zinsSatz > 0 && annuitaet > 0) {
         const monatZins = darlehen * (zinsSatz / 100 / 12);
         const monatTilg = annuitaet - monatZins;
         const tilgPct   = monatTilg > 0 ? (monatTilg * 12 / darlehen * 100).toFixed(2) : '—';
         hint.textContent = `davon Zinsen ${fmt(monatZins, waehrung)} · Tilgung ${fmt(Math.max(0, monatTilg), waehrung)} (${tilgPct} % p.a.)`;
-      } else {
-        hint.textContent = '';
-      }
+      } else { hint.textContent = ''; }
 
       if (!kaufpreis || !zinsSatz || !annuitaet || !startDatum || darlehen <= 0) {
         document.getElementById('d-dashboard').classList.add('hidden');
@@ -1428,7 +1547,7 @@ const App = {
       }
       errEl.classList.add('hidden');
 
-      const plan   = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteRate, State.sondertilgungen);
+      const plan   = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteZinsen, State.sondertilgungen);
       if (!plan.length) { document.getElementById('d-dashboard').classList.add('hidden'); return; }
 
       const gesamt = plan.reduce((s, p) => s + p.zinsen, 0);
@@ -1580,11 +1699,10 @@ const App = {
 
     // Zwei monatliche Serien (Zinsen + Tilgung) anlegen
     async createSerien() {
-      const { kaufpreis, eigenkapital, zinsSatz, annuitaet, ersteRate, startDatum, waehrung } = this.readForm();
-      const darlehen = kaufpreis - eigenkapital;
+      const { darlehen, zinsSatz, annuitaet, ersteZinsen, startDatum, waehrung } = this.readForm();
       if (!darlehen || !zinsSatz || !annuitaet || !startDatum) return;
 
-      const plan    = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteRate, State.sondertilgungen);
+      const plan    = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteZinsen, State.sondertilgungen);
       const current = plan[this.currentMonthIndex(plan)] || plan[0];
 
       const btn = document.getElementById('d-serie-btn');
