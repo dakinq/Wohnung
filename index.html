@@ -756,12 +756,12 @@
             </div>
           </div>
 
-          <!-- Serien anlegen -->
+          <!-- Buchungen aus Tilgungsplan erzeugen -->
           <div class="card" style="padding:1.25rem;">
-            <h3 style="margin-bottom:.5rem;">Buchungsserien</h3>
-            <p class="text-sm muted" style="margin-bottom:1rem;">Erstellt je eine monatliche Serie fur Zinsen und Tilgung, jeweils mit dem Anfangswert der Annuitat.</p>
+            <h3 style="margin-bottom:.5rem;">Buchungen erzeugen</h3>
+            <p class="text-sm muted" style="margin-bottom:1rem;">Erzeugt fur jeden Monat eine eigene Buchung fur Zinsen und Tilgung mit dem exakt berechneten Betrag — die Aufteilung verschiebt sich monatlich automatisch.</p>
             <div id="d-serie-status" class="hidden text-sm success-msg" style="margin-bottom:.75rem;"></div>
-            <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.createSerien()">Zinsen + Tilgung als Serien anlegen</button>
+            <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.createBuchungen()">Zinsen & Tilgung als Buchungen anlegen</button>
           </div>
 
           <!-- Sondertilgungen -->
@@ -1619,13 +1619,13 @@ const App = {
 
       document.getElementById('d-dashboard').classList.remove('hidden');
 
-      // Serie-Button-Status pruefen
-      const serienVorhanden = State.serien.some(s => s.darlehenSerie === true);
-      if (serienVorhanden) {
-        document.getElementById('d-serie-status').textContent = 'Serien bereits angelegt.';
+      // Darlehen-Buchungen bereits vorhanden?
+      const darlehenBuchungenVorhanden = State.buchungen.some(b => b.darlehenBuchung === true);
+      if (darlehenBuchungenVorhanden) {
+        document.getElementById('d-serie-status').textContent = 'Buchungen bereits angelegt.';
         document.getElementById('d-serie-status').classList.remove('hidden');
         document.getElementById('d-serie-btn').disabled = true;
-        document.getElementById('d-serie-btn').textContent = 'Serien angelegt';
+        document.getElementById('d-serie-btn').textContent = 'Buchungen angelegt';
       }
     },
 
@@ -1697,13 +1697,13 @@ const App = {
       setTimeout(() => msg.classList.add('hidden'), 2000);
     },
 
-    // Zwei monatliche Serien (Zinsen + Tilgung) anlegen
-    async createSerien() {
+    // Erzeugt einzelne Buchungen fur jeden Monat direkt aus dem Tilgungsplan
+    async createBuchungen() {
       const { darlehen, zinsSatz, annuitaet, ersteZinsen, startDatum, waehrung } = this.readForm();
       if (!darlehen || !zinsSatz || !annuitaet || !startDatum) return;
 
-      const plan    = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteZinsen, State.sondertilgungen);
-      const current = plan[this.currentMonthIndex(plan)] || plan[0];
+      const plan = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteZinsen, State.sondertilgungen);
+      if (!plan.length) return;
 
       const btn = document.getElementById('d-serie-btn');
       btn.disabled = true;
@@ -1711,50 +1711,57 @@ const App = {
 
       try {
         const { db, collection, addDoc } = window._fb;
-        const uid = State.user.uid;
+        const uid   = State.user.uid;
+        const today = todayISO();
 
-        const baseSerie = {
-          typ: 'ausgabe',
-          waehrung,
-          startDatum,
-          wiederholung: 'monatlich',
-          darlehenSerie: true,
-          createdAt: new Date().toISOString()
-        };
+        let count = 0;
+        for (const p of plan) {
+          // Nur Monate bis heute anlegen (zukuenftige werden nicht vorausgebucht)
+          if (p.datum > today) break;
 
-        // Serie Zinsen
-        const serieZins = {
-          ...baseSerie,
-          kategorie: 'Hypothekarzinsen / Schuldzinsen',
-          betrag: parseFloat(current.zinsen.toFixed(2)),
-          notiz: `Annuitat Zinsen (Start: ${fmt(current.zinsen, waehrung)})`
-        };
-        const refZ = await addDoc(collection(db, `users/${uid}/serien`), serieZins);
-        State.serien.push({ id: refZ.id, ...serieZins });
+          // Zinsen-Buchung
+          const zinsBuchung = {
+            typ: 'ausgabe',
+            kategorie: 'Hypothekarzinsen / Schuldzinsen',
+            betrag: parseFloat(p.zinsen.toFixed(2)),
+            waehrung,
+            datum: p.datum,
+            notiz: `Zinsen (Restschuld ${fmt(p.restschuld + p.tilgung, waehrung)})`,
+            fotoURL: null,
+            darlehenBuchung: true,
+            createdAt: new Date().toISOString()
+          };
+          const refZ = await addDoc(collection(db, `users/${uid}/buchungen`), zinsBuchung);
+          State.buchungen.push({ id: refZ.id, ...zinsBuchung });
 
-        // Serie Tilgung
-        const serieTilg = {
-          ...baseSerie,
-          kategorie: 'Instandhaltungsrucklage',
-          betrag: parseFloat(current.tilgung.toFixed(2)),
-          notiz: `Annuitat Tilgung (Start: ${fmt(current.tilgung, waehrung)})`
-        };
-        // Tilgung als eigene Kategorie
-        serieTilg.kategorie = 'Tilgung';
-        const refT = await addDoc(collection(db, `users/${uid}/serien`), serieTilg);
-        State.serien.push({ id: refT.id, ...serieTilg });
+          // Tilgungs-Buchung
+          const tilgBuchung = {
+            typ: 'ausgabe',
+            kategorie: 'Tilgung',
+            betrag: parseFloat(p.tilgung.toFixed(2)),
+            waehrung,
+            datum: p.datum,
+            notiz: `Tilgung (Restschuld danach ${fmt(p.restschuld, waehrung)})`,
+            fotoURL: null,
+            darlehenBuchung: true,
+            createdAt: new Date().toISOString()
+          };
+          const refT = await addDoc(collection(db, `users/${uid}/buchungen`), tilgBuchung);
+          State.buchungen.push({ id: refT.id, ...tilgBuchung });
 
-        // Buchungen sofort erzeugen (syncSerien fuer diese beiden)
-        await syncSerien();
-        await loadBuchungen();
+          count++;
+        }
 
-        document.getElementById('d-serie-status').textContent = 'Serien erfolgreich angelegt.';
-        document.getElementById('d-serie-status').classList.remove('hidden');
-        btn.textContent = 'Serien angelegt';
+        State.buchungen.sort((a, b) => b.datum.localeCompare(a.datum));
+
+        const statusEl = document.getElementById('d-serie-status');
+        statusEl.textContent = `${count} Monate angelegt (${count * 2} Buchungen).`;
+        statusEl.classList.remove('hidden');
+        btn.textContent = 'Buchungen angelegt';
 
       } catch (e) {
         btn.disabled = false;
-        btn.textContent = 'Zinsen + Tilgung als Serien anlegen';
+        btn.textContent = 'Zinsen & Tilgung als Buchungen anlegen';
         alert('Fehler: ' + e.message);
       }
     }
