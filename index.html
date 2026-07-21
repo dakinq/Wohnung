@@ -612,9 +612,16 @@
               <input id="d-annuitaet" type="number" inputmode="decimal" placeholder="1800" min="0" step="10" oninput="App.darlehen.onAnnuitaetChange()" />
               <div class="text-xs muted" id="d-annuitaet-hint" style="margin-top:.3rem;"></div>
             </div>
-            <div class="form-group">
-              <label for="d-startdatum">Startdatum</label>
-              <input id="d-startdatum" type="date" onchange="App.darlehen.recalc()" />
+            <div class="row" style="gap:.75rem;">
+              <div class="form-group" style="flex:1;">
+                <label for="d-startdatum">Startdatum</label>
+                <input id="d-startdatum" type="date" onchange="App.darlehen.recalc()" />
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label for="d-erste-rate">Erste Rate</label>
+                <input id="d-erste-rate" type="number" inputmode="decimal" placeholder="anteilig" min="0" step="10" oninput="App.darlehen.recalc()" />
+                <div class="text-xs muted" style="margin-top:.3rem;">Leer = volle Rate</div>
+              </div>
             </div>
             <div id="d-save-row" class="hidden">
               <button class="btn btn-primary" onclick="App.darlehen.saveConfig()">Konfiguration speichern</button>
@@ -695,6 +702,18 @@
             <p class="text-sm muted" style="margin-bottom:1rem;">Erstellt je eine monatliche Serie fur Zinsen und Tilgung, jeweils mit dem Anfangswert der Annuitat.</p>
             <div id="d-serie-status" class="hidden text-sm success-msg" style="margin-bottom:.75rem;"></div>
             <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.createSerien()">Zinsen + Tilgung als Serien anlegen</button>
+          </div>
+
+          <!-- Sondertilgungen -->
+          <div class="card" style="padding:1.25rem;">
+            <h3 style="margin-bottom:.25rem;">Sondertilgungen</h3>
+            <p class="text-sm muted" style="margin-bottom:1rem;">Einmalige Zusatzzahlungen reduzieren die Restschuld und verkurzen die Laufzeit.</p>
+            <div id="d-sonder-list" class="stack" style="margin-bottom:.875rem;"></div>
+            <div class="row" style="gap:.5rem;">
+              <input id="d-sonder-datum" type="month" style="flex:1;" />
+              <input id="d-sonder-betrag" type="number" inputmode="decimal" placeholder="Betrag" min="0" step="100" style="flex:1;" />
+              <button class="btn btn-secondary" style="white-space:nowrap;" onclick="App.darlehen.addSondertilgung()">Hinzufugen</button>
+            </div>
           </div>
 
           <!-- Tilgungsplan (erste 24 Monate) -->
@@ -796,6 +815,7 @@ const State = {
   buchungen:     [],
   serien:        [],
   darlehenCfg:   null,   // gespeicherte Darlehenskonfiguration
+  sondertilgungen: [],   // [{datum: 'YYYY-MM', betrag: 5000}]
   jahr:          new Date().getFullYear(),
   anzeigeWaehrung: 'EUR',
   kurs:          0.94,
@@ -876,7 +896,11 @@ async function loadDarlehenCfg() {
   const { db, doc, getDoc } = window._fb;
   const uid = State.user.uid;
   const snap = await getDoc(doc(db, `users/${uid}/settings/darlehen`));
-  if (snap.exists()) State.darlehenCfg = snap.data();
+  if (snap.exists()) {
+    const data = snap.data();
+    State.darlehenCfg      = data;
+    State.sondertilgungen  = data.sondertilgungen || [];
+  }
 }
 
 // Erzeugt fehlende Buchungen aus allen aktiven Serien
@@ -1231,25 +1255,45 @@ const App = {
       return Math.ceil(-Math.log(val) / Math.log(1 + r));
     },
 
-    // Tilgungsplan als Array berechnen (mit fixer Annuitat)
-    tilgungsplan(darlehen, zinsSatz, annuitaetMonatlich, startDatum) {
+    // Tilgungsplan als Array berechnen (mit fixer Annuitat, erster Rate und Sondertilgungen)
+    tilgungsplan(darlehen, zinsSatz, annuitaetMonatlich, startDatum, ersteRate, sondertilgungen) {
       const r = zinsSatz / 100 / 12;
       const maxMonate = this.laufzeitMonate(darlehen, zinsSatz, annuitaetMonatlich);
       if (!maxMonate) return [];
+
+      // Sondertilgungen als Map: 'YYYY-MM' -> betrag
+      const sonderMap = {};
+      (sondertilgungen || []).forEach(s => { sonderMap[s.datum] = (sonderMap[s.datum] || 0) + s.betrag; });
+
       const plan = [];
       let restschuld = darlehen;
       let [sy, sm] = startDatum.split('-').map(Number);
 
-      for (let i = 0; i < maxMonate && restschuld > 0.005; i++) {
-        const zinsen  = restschuld * r;
-        const tilgung = Math.min(annuitaetMonatlich - zinsen, restschuld);
-        restschuld    = Math.max(0, restschuld - tilgung);
+      for (let i = 0; i < maxMonate * 2 && restschuld > 0.005; i++) {
+        const monatKey = `${sy}-${String(sm).padStart(2,'0')}`;
+        const zinsen   = restschuld * r;
 
-        const monat = String(sm).padStart(2, '0');
-        plan.push({ datum: `${sy}-${monat}-01`, zinsen, tilgung, rate: zinsen + tilgung, restschuld });
+        // Erste Rate anteilig falls angegeben
+        const rate     = (i === 0 && ersteRate > 0) ? ersteRate : annuitaetMonatlich;
+        const tilgung  = Math.min(rate - zinsen, restschuld);
+        restschuld     = Math.max(0, restschuld - tilgung);
+
+        // Sondertilgung in diesem Monat abziehen
+        const sonder   = sonderMap[monatKey] || 0;
+        restschuld     = Math.max(0, restschuld - sonder);
+
+        plan.push({
+          datum: `${monatKey}-01`,
+          zinsen,
+          tilgung,
+          sonder,
+          rate: zinsen + tilgung,
+          restschuld
+        });
 
         sm++;
         if (sm > 12) { sm = 1; sy++; }
+        if (restschuld <= 0.005) break;
       }
       return plan;
     },
@@ -1268,9 +1312,10 @@ const App = {
       const zinsSatz     = parseFloat(document.getElementById('d-zinssatz').value)     || 0;
       const tilgungsSatz = parseFloat(document.getElementById('d-tilgungssatz').value) || 0;
       const annuitaet    = parseFloat(document.getElementById('d-annuitaet').value)    || 0;
+      const ersteRate    = parseFloat(document.getElementById('d-erste-rate').value)   || 0;
       const startDatum   = document.getElementById('d-startdatum').value;
       const waehrung     = document.getElementById('d-waehrung').value;
-      return { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, startDatum, waehrung };
+      return { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, ersteRate, startDatum, waehrung };
     },
 
     // Seite oeffnen: Felder aus gespeicherter Konfig fuellen
@@ -1282,11 +1327,13 @@ const App = {
         document.getElementById('d-zinssatz').value     = c.zinsSatz     || '';
         document.getElementById('d-tilgungssatz').value = c.tilgungsSatz || '';
         document.getElementById('d-annuitaet').value    = c.annuitaet    || '';
+        document.getElementById('d-erste-rate').value   = c.ersteRate    || '';
         document.getElementById('d-startdatum').value   = c.startDatum   || '';
         document.getElementById('d-waehrung').value     = c.waehrung     || 'EUR';
       } else {
         document.getElementById('d-startdatum').value = todayISO().substring(0, 8) + '01';
       }
+      this.renderSondertilgungen();
       this.recalc();
     },
 
@@ -1347,7 +1394,7 @@ const App = {
 
     // Neuberechnung und Dashboard aktualisieren
     recalc() {
-      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, startDatum, waehrung } = this.readForm();
+      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, ersteRate, startDatum, waehrung } = this.readForm();
       const darlehen = kaufpreis - eigenkapital;
 
       document.getElementById('d-save-row').classList.remove('hidden');
@@ -1381,7 +1428,7 @@ const App = {
       }
       errEl.classList.add('hidden');
 
-      const plan   = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum);
+      const plan   = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteRate, State.sondertilgungen);
       if (!plan.length) { document.getElementById('d-dashboard').classList.add('hidden'); return; }
 
       const gesamt = plan.reduce((s, p) => s + p.zinsen, 0);
@@ -1429,16 +1476,25 @@ const App = {
         document.getElementById('d-bar-zins').style.width      = `${zinsPct}%`;
       }
 
-      // Tilgungsplan (erste 24 Monate)
+      // Tilgungsplan (erste 24 regulare Monate, Sondertilgungen hervorgehoben)
       const rows = plan.slice(0, 24).map(p => {
         const monatStr = p.datum.substring(0, 7).split('-').reverse().join('.');
+        const sonderZeile = p.sonder > 0
+          ? `<div class="tilgungsplan-row" style="background:rgba(45,90,61,.06);">
+               <span class="col-dat" style="color:var(--accent);font-weight:500;">${monatStr}</span>
+               <span class="col-rate" style="color:var(--accent);font-weight:500;">Sonder</span>
+               <span class="col-zins">—</span>
+               <span class="col-tilg" style="color:var(--accent);font-weight:500;">${fmt(p.sonder, waehrung)}</span>
+               <span class="col-rest">${fmt(p.restschuld, waehrung)}</span>
+             </div>`
+          : '';
         return `<div class="tilgungsplan-row">
           <span class="col-dat">${monatStr}</span>
           <span class="col-rate">${fmt(p.rate, waehrung)}</span>
           <span class="col-zins">${fmt(p.zinsen, waehrung)}</span>
           <span class="col-tilg">${fmt(p.tilgung, waehrung)}</span>
           <span class="col-rest">${fmt(p.restschuld, waehrung)}</span>
-        </div>`;
+        </div>${sonderZeile}`;
       }).join('');
       document.getElementById('d-tilgungsplan').innerHTML = rows;
 
@@ -1454,6 +1510,54 @@ const App = {
       }
     },
 
+    // Sondertilgungen anzeigen
+    renderSondertilgungen() {
+      const container = document.getElementById('d-sonder-list');
+      if (!State.sondertilgungen.length) {
+        container.innerHTML = '<p class="text-xs muted">Noch keine Sondertilgungen eingetragen.</p>';
+        return;
+      }
+      const { waehrung } = this.readForm();
+      const sorted = [...State.sondertilgungen].sort((a, b) => a.datum.localeCompare(b.datum));
+      container.innerHTML = sorted.map((s, i) => `
+        <div class="row-between" style="font-size:.875rem;padding:.35rem 0;border-bottom:1px solid var(--border);">
+          <span>${s.datum.split('-').reverse().join('.')}</span>
+          <span style="color:var(--accent);font-weight:500;">${fmt(s.betrag, waehrung)}</span>
+          <button onclick="App.darlehen.removeSondertilgung(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:.1rem .3rem;" title="Entfernen">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>`).join('');
+    },
+
+    async addSondertilgung() {
+      const datum   = document.getElementById('d-sonder-datum').value;
+      const betrag  = parseFloat(document.getElementById('d-sonder-betrag').value);
+      if (!datum || !betrag || betrag <= 0) return;
+
+      State.sondertilgungen.push({ datum, betrag });
+      State.sondertilgungen.sort((a, b) => a.datum.localeCompare(b.datum));
+
+      document.getElementById('d-sonder-datum').value  = '';
+      document.getElementById('d-sonder-betrag').value = '';
+
+      await this._saveSondertilgungen();
+      this.renderSondertilgungen();
+      this.recalc();
+    },
+
+    async removeSondertilgung(idx) {
+      State.sondertilgungen.splice(idx, 1);
+      await this._saveSondertilgungen();
+      this.renderSondertilgungen();
+      this.recalc();
+    },
+
+    async _saveSondertilgungen() {
+      const { db, doc, setDoc } = window._fb;
+      await setDoc(doc(db, `users/${State.user.uid}/settings/darlehen`),
+        { sondertilgungen: State.sondertilgungen }, { merge: true });
+    },
+
     // Konfiguration in Firestore speichern
     async saveConfig() {
       const cfg = this.readForm();
@@ -1464,6 +1568,7 @@ const App = {
         msg.classList.remove('hidden');
         return;
       }
+      cfg.sondertilgungen = State.sondertilgungen;
       const { db, doc, setDoc } = window._fb;
       await setDoc(doc(db, `users/${State.user.uid}/settings/darlehen`), cfg);
       State.darlehenCfg = cfg;
@@ -1475,11 +1580,11 @@ const App = {
 
     // Zwei monatliche Serien (Zinsen + Tilgung) anlegen
     async createSerien() {
-      const { kaufpreis, eigenkapital, zinsSatz, annuitaet, startDatum, waehrung } = this.readForm();
+      const { kaufpreis, eigenkapital, zinsSatz, annuitaet, ersteRate, startDatum, waehrung } = this.readForm();
       const darlehen = kaufpreis - eigenkapital;
       if (!darlehen || !zinsSatz || !annuitaet || !startDatum) return;
 
-      const plan    = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum);
+      const plan    = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteRate, State.sondertilgungen);
       const current = plan[this.currentMonthIndex(plan)] || plan[0];
 
       const btn = document.getElementById('d-serie-btn');
