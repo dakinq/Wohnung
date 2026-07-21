@@ -583,7 +583,7 @@
             <div class="row" style="gap:.75rem;">
               <div class="form-group" style="flex:1;">
                 <label for="d-kaufpreis">Kaufpreis</label>
-                <input id="d-kaufpreis" type="number" inputmode="decimal" placeholder="400000" min="0" step="1000" oninput="App.darlehen.recalc()" />
+                <input id="d-kaufpreis" type="number" inputmode="decimal" placeholder="400000" min="0" step="1000" oninput="App.darlehen.onBasisChange()" />
               </div>
               <div class="form-group" style="width:90px;">
                 <label for="d-waehrung">Wahrung</label>
@@ -595,17 +595,22 @@
             </div>
             <div class="form-group">
               <label for="d-eigenkapital">Eigenkapital</label>
-              <input id="d-eigenkapital" type="number" inputmode="decimal" placeholder="100000" min="0" step="1000" oninput="App.darlehen.recalc()" />
+              <input id="d-eigenkapital" type="number" inputmode="decimal" placeholder="100000" min="0" step="1000" oninput="App.darlehen.onBasisChange()" />
             </div>
             <div class="row" style="gap:.75rem;">
               <div class="form-group" style="flex:1;">
                 <label for="d-zinssatz">Zinssatz % p.a.</label>
-                <input id="d-zinssatz" type="number" inputmode="decimal" placeholder="3.50" min="0" max="20" step="0.01" oninput="App.darlehen.recalc()" />
+                <input id="d-zinssatz" type="number" inputmode="decimal" placeholder="3.50" min="0" max="20" step="0.01" oninput="App.darlehen.onZinsChange()" />
               </div>
               <div class="form-group" style="flex:1;">
-                <label for="d-laufzeit">Laufzeit (Jahre)</label>
-                <input id="d-laufzeit" type="number" inputmode="numeric" placeholder="25" min="1" max="50" step="1" oninput="App.darlehen.recalc()" />
+                <label for="d-tilgungssatz">Tilgung % p.a.</label>
+                <input id="d-tilgungssatz" type="number" inputmode="decimal" placeholder="1.00" min="0" max="20" step="0.01" oninput="App.darlehen.onTilgungssatzChange()" />
               </div>
+            </div>
+            <div class="form-group">
+              <label for="d-annuitaet">Annuitat / Monat</label>
+              <input id="d-annuitaet" type="number" inputmode="decimal" placeholder="1800" min="0" step="10" oninput="App.darlehen.onAnnuitaetChange()" />
+              <div class="text-xs muted" id="d-annuitaet-hint" style="margin-top:.3rem;"></div>
             </div>
             <div class="form-group">
               <label for="d-startdatum">Startdatum</label>
@@ -1216,26 +1221,29 @@ const App = {
   // ── Darlehen ─────────────────────────────────────────────────────────────
   darlehen: {
 
-    // Annuitaet berechnen (monatliche Konstante)
-    annuitaet(darlehen, zinsSatz, laufzeitJahre) {
+    // Laufzeit in Monaten aus Darlehen, Zinssatz und Annuitat berechnen
+    laufzeitMonate(darlehen, zinsSatz, annuitaetMonatlich) {
       const r = zinsSatz / 100 / 12;
-      const n = laufzeitJahre * 12;
-      if (r === 0) return darlehen / n;
-      return darlehen * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+      if (r === 0) return Math.ceil(darlehen / annuitaetMonatlich);
+      // n = -ln(1 - r*D/A) / ln(1+r)
+      const val = 1 - (r * darlehen) / annuitaetMonatlich;
+      if (val <= 0) return null; // Annuitat deckt nicht mal die Zinsen
+      return Math.ceil(-Math.log(val) / Math.log(1 + r));
     },
 
-    // Tilgungsplan als Array berechnen
-    tilgungsplan(darlehen, zinsSatz, laufzeitJahre, startDatum) {
+    // Tilgungsplan als Array berechnen (mit fixer Annuitat)
+    tilgungsplan(darlehen, zinsSatz, annuitaetMonatlich, startDatum) {
       const r = zinsSatz / 100 / 12;
-      const rate = this.annuitaet(darlehen, zinsSatz, laufzeitJahre);
+      const maxMonate = this.laufzeitMonate(darlehen, zinsSatz, annuitaetMonatlich);
+      if (!maxMonate) return [];
       const plan = [];
       let restschuld = darlehen;
       let [sy, sm] = startDatum.split('-').map(Number);
 
-      for (let i = 0; i < laufzeitJahre * 12 && restschuld > 0.005; i++) {
-        const zinsen = restschuld * r;
-        const tilgung = Math.min(rate - zinsen, restschuld);
-        restschuld = Math.max(0, restschuld - tilgung);
+      for (let i = 0; i < maxMonate && restschuld > 0.005; i++) {
+        const zinsen  = restschuld * r;
+        const tilgung = Math.min(annuitaetMonatlich - zinsen, restschuld);
+        restschuld    = Math.max(0, restschuld - tilgung);
 
         const monat = String(sm).padStart(2, '0');
         plan.push({ datum: `${sy}-${monat}-01`, zinsen, tilgung, rate: zinsen + tilgung, restschuld });
@@ -1255,13 +1263,14 @@ const App = {
 
     // Formulardaten lesen
     readForm() {
-      const kaufpreis   = parseFloat(document.getElementById('d-kaufpreis').value) || 0;
-      const eigenkapital= parseFloat(document.getElementById('d-eigenkapital').value) || 0;
-      const zinsSatz    = parseFloat(document.getElementById('d-zinssatz').value) || 0;
-      const laufzeit    = parseInt(document.getElementById('d-laufzeit').value) || 0;
-      const startDatum  = document.getElementById('d-startdatum').value;
-      const waehrung    = document.getElementById('d-waehrung').value;
-      return { kaufpreis, eigenkapital, zinsSatz, laufzeit, startDatum, waehrung };
+      const kaufpreis    = parseFloat(document.getElementById('d-kaufpreis').value)    || 0;
+      const eigenkapital = parseFloat(document.getElementById('d-eigenkapital').value) || 0;
+      const zinsSatz     = parseFloat(document.getElementById('d-zinssatz').value)     || 0;
+      const tilgungsSatz = parseFloat(document.getElementById('d-tilgungssatz').value) || 0;
+      const annuitaet    = parseFloat(document.getElementById('d-annuitaet').value)    || 0;
+      const startDatum   = document.getElementById('d-startdatum').value;
+      const waehrung     = document.getElementById('d-waehrung').value;
+      return { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, startDatum, waehrung };
     },
 
     // Seite oeffnen: Felder aus gespeicherter Konfig fuellen
@@ -1271,7 +1280,8 @@ const App = {
         document.getElementById('d-kaufpreis').value    = c.kaufpreis    || '';
         document.getElementById('d-eigenkapital').value = c.eigenkapital || '';
         document.getElementById('d-zinssatz').value     = c.zinsSatz     || '';
-        document.getElementById('d-laufzeit').value     = c.laufzeit     || '';
+        document.getElementById('d-tilgungssatz').value = c.tilgungsSatz || '';
+        document.getElementById('d-annuitaet').value    = c.annuitaet    || '';
         document.getElementById('d-startdatum').value   = c.startDatum   || '';
         document.getElementById('d-waehrung').value     = c.waehrung     || 'EUR';
       } else {
@@ -1280,20 +1290,100 @@ const App = {
       this.recalc();
     },
 
+    // Kaufpreis oder Eigenkapital geandert: Annuitat aus Tilgungssatz neu berechnen
+    onBasisChange() {
+      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz } = this.readForm();
+      const darlehen = kaufpreis - eigenkapital;
+      if (darlehen > 0 && zinsSatz > 0 && tilgungsSatz > 0) {
+        const ann = darlehen * (zinsSatz + tilgungsSatz) / 100 / 12;
+        document.getElementById('d-annuitaet').value = ann.toFixed(2);
+      }
+      this.recalc();
+    },
+
+    // Zinssatz geandert: Tilgungssatz neu berechnen falls Annuitat bekannt
+    onZinsChange() {
+      const { kaufpreis, eigenkapital, zinsSatz, annuitaet } = this.readForm();
+      const darlehen = kaufpreis - eigenkapital;
+      if (darlehen > 0 && annuitaet > 0 && zinsSatz > 0) {
+        // Tilgungsanteil = Annuitat - Monatszinsen; hochrechnen auf % p.a.
+        const monatZins = darlehen * (zinsSatz / 100 / 12);
+        const monatTilg = annuitaet - monatZins;
+        if (monatTilg > 0) {
+          const tilgPct = (monatTilg * 12 / darlehen) * 100;
+          document.getElementById('d-tilgungssatz').value = tilgPct.toFixed(2);
+        }
+      }
+      this.recalc();
+    },
+
+    // Tilgungssatz geandert: Annuitat berechnen
+    onTilgungssatzChange() {
+      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz } = this.readForm();
+      const darlehen = kaufpreis - eigenkapital;
+      if (darlehen > 0 && zinsSatz > 0 && tilgungsSatz > 0) {
+        const ann = darlehen * (zinsSatz + tilgungsSatz) / 100 / 12;
+        document.getElementById('d-annuitaet').value = ann.toFixed(2);
+      }
+      this.recalc();
+    },
+
+    // Annuitat direkt eingegeben: Tilgungssatz berechnen
+    onAnnuitaetChange() {
+      const { kaufpreis, eigenkapital, zinsSatz, annuitaet } = this.readForm();
+      const darlehen = kaufpreis - eigenkapital;
+      if (darlehen > 0 && zinsSatz > 0 && annuitaet > 0) {
+        const monatZins = darlehen * (zinsSatz / 100 / 12);
+        const monatTilg = annuitaet - monatZins;
+        if (monatTilg > 0) {
+          const tilgPct = (monatTilg * 12 / darlehen) * 100;
+          document.getElementById('d-tilgungssatz').value = tilgPct.toFixed(2);
+        } else {
+          document.getElementById('d-tilgungssatz').value = '';
+        }
+      }
+      this.recalc();
+    },
+
     // Neuberechnung und Dashboard aktualisieren
     recalc() {
-      const { kaufpreis, eigenkapital, zinsSatz, laufzeit, startDatum, waehrung } = this.readForm();
+      const { kaufpreis, eigenkapital, zinsSatz, tilgungsSatz, annuitaet, startDatum, waehrung } = this.readForm();
       const darlehen = kaufpreis - eigenkapital;
 
       document.getElementById('d-save-row').classList.remove('hidden');
 
-      if (!kaufpreis || !zinsSatz || !laufzeit || !startDatum || darlehen <= 0) {
+      const errEl  = document.getElementById('d-msg');
+      const hint   = document.getElementById('d-annuitaet-hint');
+
+      // Hint: Tilgungsanteil in aktueller Annuitat anzeigen
+      if (darlehen > 0 && zinsSatz > 0 && annuitaet > 0) {
+        const monatZins = darlehen * (zinsSatz / 100 / 12);
+        const monatTilg = annuitaet - monatZins;
+        const tilgPct   = monatTilg > 0 ? (monatTilg * 12 / darlehen * 100).toFixed(2) : '—';
+        hint.textContent = `davon Zinsen ${fmt(monatZins, waehrung)} · Tilgung ${fmt(Math.max(0, monatTilg), waehrung)} (${tilgPct} % p.a.)`;
+      } else {
+        hint.textContent = '';
+      }
+
+      if (!kaufpreis || !zinsSatz || !annuitaet || !startDatum || darlehen <= 0) {
         document.getElementById('d-dashboard').classList.add('hidden');
         return;
       }
 
-      const plan   = this.tilgungsplan(darlehen, zinsSatz, laufzeit, startDatum);
-      const rate   = this.annuitaet(darlehen, zinsSatz, laufzeit);
+      // Pruefen ob Annuitat die Zinsen ueberhaupt deckt
+      const erstZinsen = darlehen * (zinsSatz / 100 / 12);
+      if (annuitaet <= erstZinsen) {
+        errEl.className = 'error-msg mt-1';
+        errEl.textContent = `Annuitat zu niedrig: Erste Zinsen betragen bereits ${fmt(erstZinsen, waehrung)}/Monat.`;
+        errEl.classList.remove('hidden');
+        document.getElementById('d-dashboard').classList.add('hidden');
+        return;
+      }
+      errEl.classList.add('hidden');
+
+      const plan   = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum);
+      if (!plan.length) { document.getElementById('d-dashboard').classList.add('hidden'); return; }
+
       const gesamt = plan.reduce((s, p) => s + p.zinsen, 0);
 
       // Aktueller Monat
@@ -1305,23 +1395,29 @@ const App = {
       const getilgt    = darlehen - restschuld;
       const pct        = Math.round((getilgt / darlehen) * 100);
 
-      // Restlaufzeit in Monaten ab heute
-      const restMonate = plan.length - idx;
-      const restJahre  = Math.floor(restMonate / 12);
-      const restMon    = restMonate % 12;
+      // Laufzeit aus Plan
+      const gesamtMonate = plan.length;
+      const restMonate   = plan.length - idx;
+      const restJahre    = Math.floor(restMonate / 12);
+      const restMon      = restMonate % 12;
+      const gesamtJahre  = Math.floor(gesamtMonate / 12);
+      const gesamtMon    = gesamtMonate % 12;
 
       // KPIs setzen
-      document.getElementById('d-restschuld').textContent    = fmt(restschuld, waehrung);
-      document.getElementById('d-getilgt-pct').textContent   = `${pct} % getilgt`;
-      document.getElementById('d-progress').style.width      = `${pct}%`;
+      document.getElementById('d-restschuld').textContent      = fmt(restschuld, waehrung);
+      document.getElementById('d-getilgt-pct').textContent     = `${pct} % getilgt`;
+      document.getElementById('d-progress').style.width        = `${pct}%`;
       document.getElementById('d-darlehen-betrag').textContent = fmt(darlehen, waehrung);
-      document.getElementById('d-rate').textContent          = fmt(rate, waehrung);
-      document.getElementById('d-gesamtzinsen').textContent  = fmt(gesamt, waehrung);
+      document.getElementById('d-rate').textContent            = fmt(annuitaet, waehrung);
+      document.getElementById('d-gesamtzinsen').textContent    = fmt(gesamt, waehrung);
 
+      const laufzeitText = gesamtJahre > 0
+        ? `${gesamtJahre} J ${gesamtMon > 0 ? gesamtMon + ' M' : ''}`.trim()
+        : `${gesamtMonate} M`;
       const restText = restJahre > 0
-        ? `${restJahre} J ${restMon} M`
-        : `${restMonate} Monate`;
-      document.getElementById('d-restlaufzeit').textContent = restText;
+        ? `${restJahre} J ${restMon > 0 ? restMon + ' M' : ''}`.trim()
+        : `${restMonate} M`;
+      document.getElementById('d-restlaufzeit').textContent = `${restText} (ges. ${laufzeitText})`;
 
       // Aktueller Monat Split
       if (current) {
@@ -1362,7 +1458,7 @@ const App = {
     async saveConfig() {
       const cfg = this.readForm();
       const msg = document.getElementById('d-msg');
-      if (!cfg.kaufpreis || !cfg.zinsSatz || !cfg.laufzeit || !cfg.startDatum) {
+      if (!cfg.kaufpreis || !cfg.zinsSatz || !cfg.annuitaet || !cfg.startDatum) {
         msg.className = 'error-msg mt-1';
         msg.textContent = 'Bitte alle Felder ausfullen.';
         msg.classList.remove('hidden');
@@ -1379,11 +1475,11 @@ const App = {
 
     // Zwei monatliche Serien (Zinsen + Tilgung) anlegen
     async createSerien() {
-      const { kaufpreis, eigenkapital, zinsSatz, laufzeit, startDatum, waehrung } = this.readForm();
+      const { kaufpreis, eigenkapital, zinsSatz, annuitaet, startDatum, waehrung } = this.readForm();
       const darlehen = kaufpreis - eigenkapital;
-      if (!darlehen || !zinsSatz || !laufzeit || !startDatum) return;
+      if (!darlehen || !zinsSatz || !annuitaet || !startDatum) return;
 
-      const plan    = this.tilgungsplan(darlehen, zinsSatz, laufzeit, startDatum);
+      const plan    = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum);
       const current = plan[this.currentMonthIndex(plan)] || plan[0];
 
       const btn = document.getElementById('d-serie-btn');
