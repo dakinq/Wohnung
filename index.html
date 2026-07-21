@@ -252,6 +252,96 @@
       background: var(--bg); transition: border-color .15s;
     }
     .upload-area:hover { border-color: var(--accent); }
+
+    /* ── WIEDERKEHREND ── */
+    .recurring-badge {
+      display: inline-flex; align-items: center; gap: .25rem;
+      font-size: .7rem; font-weight: 500; color: var(--accent);
+      background: var(--accent-l); border-radius: 4px;
+      padding: .1rem .35rem; margin-top: .2rem;
+    }
+    .recurring-icon {
+      width: 11px; height: 11px;
+    }
+    .serie-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+    }
+    .serie-item {
+      display: flex; align-items: flex-start; gap: .75rem;
+      padding: .875rem 1rem;
+    }
+    .serie-item + .serie-item { border-top: 1px solid var(--border); }
+    .serie-info { flex: 1; min-width: 0; }
+    .serie-kategorie { font-size: .875rem; font-weight: 500; }
+    .serie-meta { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
+    .serie-betrag { font-size: .9375rem; font-weight: 600; white-space: nowrap; }
+    .serie-delete-btn {
+      background: none; border: none; cursor: pointer; padding: .25rem;
+      color: var(--muted); -webkit-tap-highlight-color: transparent;
+      font-size: 1.1rem; line-height: 1;
+    }
+    .serie-delete-btn:hover { color: var(--danger); }
+    .serie-stop-btn {
+      background: none; border: none; cursor: pointer; padding: .25rem;
+      color: var(--muted); -webkit-tap-highlight-color: transparent;
+      font-size: 1.1rem; line-height: 1;
+    }
+    .serie-stop-btn:hover { color: var(--danger); }
+    .serie-item.gestoppt { opacity: .55; }
+    .serie-item.gestoppt .serie-kategorie { text-decoration: line-through; }
+    .serie-status-badge {
+      display: inline-block; font-size: .7rem; font-weight: 500;
+      border-radius: 4px; padding: .1rem .35rem; margin-top: .25rem;
+    }
+    .serie-status-badge.aktiv   { color: var(--accent); background: var(--accent-l); }
+    .serie-status-badge.gestoppt { color: var(--muted); background: var(--border); }
+    .serie-actions { display: flex; align-items: center; gap: .25rem; }
+
+    /* ── DARLEHEN DASHBOARD ── */
+    --zins-color:    #8B5E2B;
+    --tilg-color:    #2D5A3D;
+
+    .darlehen-hero {
+      background: var(--accent); border-radius: var(--r);
+      padding: 1.25rem; color: #fff;
+    }
+    .darlehen-hero .kpi-label { color: rgba(255,255,255,.7); }
+    .darlehen-hero .kpi-value { color: #fff; font-size: 1.75rem; }
+
+    .progress-bar-wrap {
+      height: 10px; border-radius: 5px;
+      background: var(--border); overflow: hidden; margin-top: .5rem;
+    }
+    .progress-bar-fill {
+      height: 100%; border-radius: 5px;
+      background: var(--accent); transition: width .4s ease;
+    }
+
+    .split-bar-wrap {
+      height: 14px; border-radius: 7px; overflow: hidden;
+      display: flex; margin-top: .5rem;
+    }
+    .split-bar-zins  { background: #C8893D; transition: width .4s ease; }
+    .split-bar-tilg  { background: var(--accent); flex: 1; }
+
+    .legend-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .legend-dot.zins { background: #C8893D; }
+    .legend-dot.tilg { background: var(--accent); }
+
+    .tilgungsplan-row {
+      display: flex; align-items: center;
+      padding: .6rem 1rem; font-size: .8125rem; gap: .5rem;
+    }
+    .tilgungsplan-row + .tilgungsplan-row { border-top: 1px solid var(--border); }
+    .tilgungsplan-row.header { color: var(--muted); font-weight: 500; font-size: .75rem; }
+    .tilgungsplan-row .col-dat  { width: 70px; flex-shrink: 0; }
+    .tilgungsplan-row .col-rate { width: 72px; flex-shrink: 0; text-align: right; font-variant-numeric: tabular-nums; }
+    .tilgungsplan-row .col-zins { flex: 1; text-align: right; color: #8B5E2B; font-variant-numeric: tabular-nums; }
+    .tilgungsplan-row .col-tilg { flex: 1; text-align: right; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .tilgungsplan-row .col-rest { flex: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -399,6 +489,16 @@
             <input id="neu-datum" type="date" />
           </div>
 
+          <!-- Wiederkehrend -->
+          <div class="form-group">
+            <label>Wiederkehrend</label>
+            <div class="segment" style="grid-template-columns:repeat(3,1fr);">
+              <button class="seg-btn active" id="wdh-einmalig" onclick="App.setWiederholung('einmalig')">Einmalig</button>
+              <button class="seg-btn" id="wdh-monatlich" onclick="App.setWiederholung('monatlich')">Monatlich</button>
+              <button class="seg-btn" id="wdh-jaehrlich" onclick="App.setWiederholung('jaehrlich')">Jährlich</button>
+            </div>
+          </div>
+
           <!-- Notiz -->
           <div class="form-group">
             <label for="neu-notiz">Notiz (optional)</label>
@@ -452,7 +552,163 @@
 
         <button class="btn btn-secondary" onclick="App.logout()">Abmelden</button>
 
+        <div class="card" style="padding:1.25rem;">
+          <h3 style="margin-bottom:.5rem;">Wiederkehrende Buchungen</h3>
+          <p class="text-sm muted" style="margin-bottom:1rem;">Verwalte deine Serien (Miete, Zinsen, etc.)</p>
+          <button class="btn btn-secondary" onclick="App.goto('serien')">Serien verwalten</button>
+        </div>
+
         <p class="muted text-xs" style="text-align:center;">PDF-Export kommt in Phase 4.</p>
+      </div>
+    </div>
+
+    <!-- ── SERIEN ── -->
+    <div id="page-serien" class="page hidden">
+      <div class="stack">
+        <p class="text-sm muted">Wiederkehrende Buchungen werden automatisch jeden Monat bzw. jedes Jahr eingetragen, ab dem Startdatum der Serie.</p>
+        <div id="serien-list">
+          <div class="spinner-dark"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DARLEHEN ── -->
+    <div id="page-darlehen" class="page hidden">
+      <div class="stack">
+
+        <!-- Eingabe-Karte -->
+        <div class="card" style="padding:1.25rem;">
+          <h3 style="margin-bottom:1rem;">Darlehen konfigurieren</h3>
+          <div class="stack">
+            <div class="row" style="gap:.75rem;">
+              <div class="form-group" style="flex:1;">
+                <label for="d-kaufpreis">Kaufpreis</label>
+                <input id="d-kaufpreis" type="number" inputmode="decimal" placeholder="400000" min="0" step="1000" oninput="App.darlehen.recalc()" />
+              </div>
+              <div class="form-group" style="width:90px;">
+                <label for="d-waehrung">Wahrung</label>
+                <select id="d-waehrung" onchange="App.darlehen.recalc()">
+                  <option value="EUR">EUR</option>
+                  <option value="CHF">CHF</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="d-eigenkapital">Eigenkapital</label>
+              <input id="d-eigenkapital" type="number" inputmode="decimal" placeholder="100000" min="0" step="1000" oninput="App.darlehen.recalc()" />
+            </div>
+            <div class="row" style="gap:.75rem;">
+              <div class="form-group" style="flex:1;">
+                <label for="d-zinssatz">Zinssatz % p.a.</label>
+                <input id="d-zinssatz" type="number" inputmode="decimal" placeholder="3.50" min="0" max="20" step="0.01" oninput="App.darlehen.recalc()" />
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label for="d-laufzeit">Laufzeit (Jahre)</label>
+                <input id="d-laufzeit" type="number" inputmode="numeric" placeholder="25" min="1" max="50" step="1" oninput="App.darlehen.recalc()" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="d-startdatum">Startdatum</label>
+              <input id="d-startdatum" type="date" onchange="App.darlehen.recalc()" />
+            </div>
+            <div id="d-save-row" class="hidden">
+              <button class="btn btn-primary" onclick="App.darlehen.saveConfig()">Konfiguration speichern</button>
+            </div>
+            <div id="d-msg" class="hidden"></div>
+          </div>
+        </div>
+
+        <!-- Dashboard (erscheint nach Eingabe) -->
+        <div id="d-dashboard" class="hidden stack">
+
+          <!-- Hero: Restschuld -->
+          <div class="darlehen-hero">
+            <div class="kpi-label">Aktuelle Restschuld</div>
+            <div class="kpi-value tabular" id="d-restschuld">—</div>
+            <div style="margin-top:.75rem;">
+              <div class="row-between" style="margin-bottom:.25rem;">
+                <span style="font-size:.75rem;color:rgba(255,255,255,.7);">Getilgt</span>
+                <span style="font-size:.75rem;color:rgba(255,255,255,.7);" id="d-getilgt-pct">—</span>
+              </div>
+              <div class="progress-bar-wrap" style="background:rgba(255,255,255,.2);">
+                <div class="progress-bar-fill" id="d-progress" style="background:#fff;width:0%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPIs -->
+          <div class="kpi-grid">
+            <div class="kpi-card saldo-card">
+              <div class="kpi-label">Darlehensbetrag</div>
+              <div class="kpi-value tabular text-sm" id="d-darlehen-betrag" style="font-size:1.1rem;">—</div>
+            </div>
+            <div class="kpi-card saldo-card">
+              <div class="kpi-label">Monatliche Rate</div>
+              <div class="kpi-value tabular" id="d-rate" style="font-size:1.1rem;">—</div>
+            </div>
+            <div class="kpi-card saldo-card">
+              <div class="kpi-label">Restlaufzeit</div>
+              <div class="kpi-value" id="d-restlaufzeit" style="font-size:1.1rem;">—</div>
+            </div>
+            <div class="kpi-card saldo-card">
+              <div class="kpi-label">Gesamtzinsen</div>
+              <div class="kpi-value tabular" id="d-gesamtzinsen" style="font-size:1.1rem; color:#8B5E2B;">—</div>
+            </div>
+          </div>
+
+          <!-- Aktueller Monatsanteil -->
+          <div class="card" style="padding:1.25rem;">
+            <div class="row-between" style="margin-bottom:.75rem;">
+              <span class="bold text-sm">Aktueller Monat</span>
+              <span class="text-xs muted" id="d-aktuell-monat">—</span>
+            </div>
+            <div class="split-bar-wrap">
+              <div class="split-bar-zins" id="d-bar-zins" style="width:50%;"></div>
+              <div class="split-bar-tilg" id="d-bar-tilg"></div>
+            </div>
+            <div class="row" style="gap:1rem;margin-top:.75rem;">
+              <div class="row" style="gap:.4rem;flex:1;">
+                <div class="legend-dot zins"></div>
+                <div>
+                  <div class="text-xs muted">Zinsen</div>
+                  <div class="text-sm bold tabular" id="d-aktuell-zins" style="color:#8B5E2B;">—</div>
+                </div>
+              </div>
+              <div class="row" style="gap:.4rem;flex:1;">
+                <div class="legend-dot tilg"></div>
+                <div>
+                  <div class="text-xs muted">Tilgung</div>
+                  <div class="text-sm bold tabular" id="d-aktuell-tilg" style="color:var(--accent);">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Serien anlegen -->
+          <div class="card" style="padding:1.25rem;">
+            <h3 style="margin-bottom:.5rem;">Buchungsserien</h3>
+            <p class="text-sm muted" style="margin-bottom:1rem;">Erstellt je eine monatliche Serie fur Zinsen und Tilgung, jeweils mit dem Anfangswert der Annuitat.</p>
+            <div id="d-serie-status" class="hidden text-sm success-msg" style="margin-bottom:.75rem;"></div>
+            <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.createSerien()">Zinsen + Tilgung als Serien anlegen</button>
+          </div>
+
+          <!-- Tilgungsplan (erste 24 Monate) -->
+          <div class="card" style="overflow:hidden;">
+            <div style="padding:.875rem 1rem;border-bottom:1px solid var(--border);">
+              <span class="bold text-sm">Tilgungsplan</span>
+              <span class="text-xs muted" style="margin-left:.5rem;">erste 24 Monate</span>
+            </div>
+            <div class="tilgungsplan-row header">
+              <span class="col-dat">Monat</span>
+              <span class="col-rate">Rate</span>
+              <span class="col-zins">Zinsen</span>
+              <span class="col-tilg">Tilgung</span>
+              <span class="col-rest">Restschuld</span>
+            </div>
+            <div id="d-tilgungsplan"></div>
+          </div>
+
+        </div><!-- /#d-dashboard -->
       </div>
     </div>
 
@@ -464,7 +720,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
       </svg>
-      Übersicht
+      Ubersicht
     </button>
     <button class="nav-btn" id="nav-buchungen" onclick="App.goto('buchungen')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -479,6 +735,12 @@
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
       </svg>
       Neu
+    </button>
+    <button class="nav-btn" id="nav-darlehen" onclick="App.goto('darlehen')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      </svg>
+      Darlehen
     </button>
     <button class="nav-btn" id="nav-einstellungen" onclick="App.goto('einstellungen')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -505,12 +767,13 @@ const KATEGORIEN = {
   ],
   ausgabe: [
     'Hypothekarzinsen / Schuldzinsen',
+    'Tilgung',
     'Reparaturen & Unterhalt',
     'Nebenkosten (Wasser, Strom, Heizung)',
     'Hausverwaltung / Verwaltungskosten',
-    'Gebäude- & Haftpflichtversicherung',
+    'Gebaude- & Haftpflichtversicherung',
     'Grundsteuer / Liegenschaftssteuer',
-    'Instandhaltungsrücklage',
+    'Instandhaltungsrucklage',
     'Abschreibung AfA',
     'Energiespar-Investitionen',
     'Fahrtkosten zur Immobilie',
@@ -526,10 +789,13 @@ const State = {
   user:          null,
   currentPage:   'uebersicht',
   buchungen:     [],
+  serien:        [],
+  darlehenCfg:   null,   // gespeicherte Darlehenskonfiguration
   jahr:          new Date().getFullYear(),
   anzeigeWaehrung: 'EUR',
-  kurs:          0.94,   // 1 EUR in CHF
+  kurs:          0.94,
   neuTyp:        'ausgabe',
+  neuWiederholung: 'einmalig',
   neuFotoFile:   null,
   neuFotoURL:    null,
 };
@@ -593,6 +859,77 @@ async function loadSettings() {
   document.getElementById('kurs-input').value = State.kurs;
 }
 
+async function loadSerien() {
+  const { db, collection, getDocs, query, orderBy } = window._fb;
+  const uid = State.user.uid;
+  const q = query(collection(db, `users/${uid}/serien`), orderBy('startDatum', 'desc'));
+  const snap = await getDocs(q);
+  State.serien = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function loadDarlehenCfg() {
+  const { db, doc, getDoc } = window._fb;
+  const uid = State.user.uid;
+  const snap = await getDoc(doc(db, `users/${uid}/settings/darlehen`));
+  if (snap.exists()) State.darlehenCfg = snap.data();
+}
+
+// Erzeugt fehlende Buchungen aus allen aktiven Serien
+async function syncSerien() {
+  if (!State.serien.length) return;
+  const { db, collection, addDoc } = window._fb;
+  const uid = State.user.uid;
+  const today = todayISO();
+
+  for (const serie of State.serien) {
+    // Gestoppte Serien werden nicht mehr weiter befuellt
+    if (serie.stoppDatum) continue;
+
+    const dates = getSerienDates(serie, today);
+    for (const datum of dates) {
+      const exists = State.buchungen.some(
+        b => b.serieId === serie.id && b.datum === datum
+      );
+      if (!exists) {
+        const buchung = {
+          typ: serie.typ,
+          kategorie: serie.kategorie,
+          betrag: serie.betrag,
+          waehrung: serie.waehrung,
+          datum,
+          notiz: serie.notiz || '',
+          fotoURL: null,
+          serieId: serie.id,
+          wiederholung: serie.wiederholung,
+          createdAt: new Date().toISOString()
+        };
+        const ref = await addDoc(collection(db, `users/${uid}/buchungen`), buchung);
+        State.buchungen.push({ id: ref.id, ...buchung });
+      }
+    }
+  }
+  State.buchungen.sort((a, b) => b.datum.localeCompare(a.datum));
+}
+
+// Berechnet alle faelligen Daten einer Serie bis heute
+function getSerienDates(serie, today) {
+  const dates = [];
+  let current = serie.startDatum;
+  while (current <= today) {
+    dates.push(current);
+    const [y, m, d] = current.split('-').map(Number);
+    if (serie.wiederholung === 'monatlich') {
+      const next = new Date(y, m, d); // m ist bereits +1 durch 0-index
+      current = next.toISOString().split('T')[0];
+    } else if (serie.wiederholung === 'jaehrlich') {
+      current = `${y + 1}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    } else {
+      break;
+    }
+  }
+  return dates;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // APP CONTROLLER
 // ═══════════════════════════════════════════════════════════════════════════
@@ -611,16 +948,28 @@ const App = {
     if (navBtn) navBtn.classList.add('active');
 
     const titles = {
-      uebersicht: 'Übersicht',
-      buchungen: 'Buchungen',
-      neu: 'Neue Buchung',
-      einstellungen: 'Einstellungen'
+      uebersicht:    'Ubersicht',
+      buchungen:     'Buchungen',
+      neu:           'Neue Buchung',
+      einstellungen: 'Einstellungen',
+      serien:        'Wiederkehrende Buchungen',
+      darlehen:      'Darlehen'
     };
     document.getElementById('topbar-title').textContent = titles[page] || '';
 
-    if (page === 'uebersicht') App.renderUebersicht();
-    if (page === 'buchungen')  App.renderBuchungen();
-    if (page === 'neu')        App.resetNeu();
+    // Back-Button fuer Unterseiten
+    const action = document.getElementById('topbar-action');
+    if (page === 'serien') {
+      action.innerHTML = `<button class="btn-sm" onclick="App.goto('einstellungen')" style="font-size:.8125rem;">Zurueck</button>`;
+    } else {
+      action.innerHTML = '';
+    }
+
+    if (page === 'uebersicht')  App.renderUebersicht();
+    if (page === 'buchungen')   App.renderBuchungen();
+    if (page === 'neu')         App.resetNeu();
+    if (page === 'serien')      App.renderSerien();
+    if (page === 'darlehen')    App.darlehen.open();
   },
 
   // ── Übersicht ────────────────────────────────────────────────────────────
@@ -693,17 +1042,20 @@ const App = {
       return;
     }
 
+    const recurringIcon = `<svg class="recurring-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.6"/></svg>`;
+
     const html = '<div class="card" style="overflow:hidden;">' +
       State.buchungen.map(b => `
         <div class="buchung-item">
-          <div class="buchung-dot ${b.typ}"></div>
+          <div class="buchung-dot ${b.typ === 'einnahme' ? 'income' : 'expense'}"></div>
           <div class="buchung-info">
             <div class="buchung-kategorie">${b.kategorie}</div>
             <div class="buchung-datum">${fmtDate(b.datum)}${b.notiz ? ' · ' + b.notiz : ''}</div>
+            ${b.serieId ? `<div class="recurring-badge">${recurringIcon}${b.wiederholung === 'monatlich' ? 'Monatlich' : 'Jahrlich'}</div>` : ''}
           </div>
           <div>
             <div class="buchung-betrag ${b.typ === 'einnahme' ? 'income' : 'expense'}">
-              ${b.typ === 'ausgabe' ? '−' : '+'}${fmt(b.betrag, b.waehrung)}
+              ${b.typ === 'ausgabe' ? '\u2212' : '+'}${fmt(b.betrag, b.waehrung)}
             </div>
             ${b.fotoURL ? `<div style="margin-top:.25rem;text-align:right;"><a href="${b.fotoURL}" target="_blank" style="font-size:.75rem;color:var(--accent);">Beleg</a></div>` : ''}
           </div>
@@ -717,11 +1069,15 @@ const App = {
   // ── Neue Buchung ─────────────────────────────────────────────────────────
   resetNeu() {
     State.neuTyp = 'ausgabe';
+    State.neuWiederholung = 'einmalig';
     State.neuFotoFile = null;
     State.neuFotoURL = null;
 
     document.getElementById('typ-ausgabe').classList.add('active');
     document.getElementById('typ-einnahme').classList.remove('active');
+    document.getElementById('wdh-einmalig').classList.add('active');
+    document.getElementById('wdh-monatlich').classList.remove('active');
+    document.getElementById('wdh-jaehrlich').classList.remove('active');
     document.getElementById('neu-betrag').value = '';
     document.getElementById('neu-datum').value = todayISO();
     document.getElementById('neu-notiz').value = '';
@@ -734,6 +1090,13 @@ const App = {
     document.getElementById('neu-save-btn').textContent = 'Speichern';
 
     App.updateKategorien();
+  },
+
+  setWiederholung(wdh) {
+    State.neuWiederholung = wdh;
+    ['einmalig', 'monatlich', 'jaehrlich'].forEach(w => {
+      document.getElementById(`wdh-${w}`).classList.toggle('active', w === wdh);
+    });
   },
 
   setTyp(typ) {
@@ -782,6 +1145,7 @@ const App = {
     const kat    = document.getElementById('neu-kategorie').value;
     const waehr  = document.getElementById('neu-waehrung').value;
     const notiz  = document.getElementById('neu-notiz').value.trim();
+    const wdh    = State.neuWiederholung;
 
     if (!betrag || betrag <= 0) { errEl.textContent = 'Bitte einen gültigen Betrag eingeben.'; errEl.classList.remove('hidden'); return; }
     if (!datum)  { errEl.textContent = 'Bitte ein Datum wählen.'; errEl.classList.remove('hidden'); return; }
@@ -801,18 +1165,37 @@ const App = {
         fotoURL = await getDownloadURL(snap.ref);
       }
 
-      const buchung = {
-        typ: State.neuTyp,
-        kategorie: kat,
-        betrag,
-        waehrung: waehr,
-        datum,
-        notiz,
-        fotoURL,
-        createdAt: new Date().toISOString()
-      };
+      if (wdh === 'einmalig') {
+        // Normale einmalige Buchung
+        const buchung = {
+          typ: State.neuTyp, kategorie: kat, betrag, waehrung: waehr,
+          datum, notiz, fotoURL, createdAt: new Date().toISOString()
+        };
+        await addDoc(collection(db, `users/${uid}/buchungen`), buchung);
 
-      await addDoc(collection(db, `users/${uid}/buchungen`), buchung);
+      } else {
+        // Serie anlegen
+        const serie = {
+          typ: State.neuTyp, kategorie: kat, betrag, waehrung: waehr,
+          startDatum: datum, notiz, wiederholung: wdh,
+          createdAt: new Date().toISOString()
+        };
+        const serieRef = await addDoc(collection(db, `users/${uid}/serien`), serie);
+        const serieId = serieRef.id;
+        State.serien.push({ id: serieId, ...serie });
+
+        // Alle faelligen Buchungen bis heute sofort erstellen
+        const today = todayISO();
+        const dates = getSerienDates({ ...serie, id: serieId }, today);
+        for (const d of dates) {
+          const buchung = {
+            typ: State.neuTyp, kategorie: kat, betrag, waehrung: waehr,
+            datum: d, notiz, fotoURL: null, serieId, wiederholung: wdh,
+            createdAt: new Date().toISOString()
+          };
+          await addDoc(collection(db, `users/${uid}/buchungen`), buchung);
+        }
+      }
 
       // Save last used currency
       await setDoc(doc(db, `users/${uid}/settings/main`), { letzteWaehrung: waehr, kurs: State.kurs }, { merge: true });
@@ -827,6 +1210,234 @@ const App = {
       errEl.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = 'Speichern';
+    }
+  },
+
+  // ── Darlehen ─────────────────────────────────────────────────────────────
+  darlehen: {
+
+    // Annuitaet berechnen (monatliche Konstante)
+    annuitaet(darlehen, zinsSatz, laufzeitJahre) {
+      const r = zinsSatz / 100 / 12;
+      const n = laufzeitJahre * 12;
+      if (r === 0) return darlehen / n;
+      return darlehen * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    },
+
+    // Tilgungsplan als Array berechnen
+    tilgungsplan(darlehen, zinsSatz, laufzeitJahre, startDatum) {
+      const r = zinsSatz / 100 / 12;
+      const rate = this.annuitaet(darlehen, zinsSatz, laufzeitJahre);
+      const plan = [];
+      let restschuld = darlehen;
+      let [sy, sm] = startDatum.split('-').map(Number);
+
+      for (let i = 0; i < laufzeitJahre * 12 && restschuld > 0.005; i++) {
+        const zinsen = restschuld * r;
+        const tilgung = Math.min(rate - zinsen, restschuld);
+        restschuld = Math.max(0, restschuld - tilgung);
+
+        const monat = String(sm).padStart(2, '0');
+        plan.push({ datum: `${sy}-${monat}-01`, zinsen, tilgung, rate: zinsen + tilgung, restschuld });
+
+        sm++;
+        if (sm > 12) { sm = 1; sy++; }
+      }
+      return plan;
+    },
+
+    // Aktuellen Monatsindex im Plan ermitteln
+    currentMonthIndex(plan) {
+      const today = todayISO().substring(0, 7); // YYYY-MM
+      const idx = plan.findIndex(p => p.datum.substring(0, 7) === today);
+      return idx >= 0 ? idx : 0;
+    },
+
+    // Formulardaten lesen
+    readForm() {
+      const kaufpreis   = parseFloat(document.getElementById('d-kaufpreis').value) || 0;
+      const eigenkapital= parseFloat(document.getElementById('d-eigenkapital').value) || 0;
+      const zinsSatz    = parseFloat(document.getElementById('d-zinssatz').value) || 0;
+      const laufzeit    = parseInt(document.getElementById('d-laufzeit').value) || 0;
+      const startDatum  = document.getElementById('d-startdatum').value;
+      const waehrung    = document.getElementById('d-waehrung').value;
+      return { kaufpreis, eigenkapital, zinsSatz, laufzeit, startDatum, waehrung };
+    },
+
+    // Seite oeffnen: Felder aus gespeicherter Konfig fuellen
+    open() {
+      if (State.darlehenCfg) {
+        const c = State.darlehenCfg;
+        document.getElementById('d-kaufpreis').value    = c.kaufpreis    || '';
+        document.getElementById('d-eigenkapital').value = c.eigenkapital || '';
+        document.getElementById('d-zinssatz').value     = c.zinsSatz     || '';
+        document.getElementById('d-laufzeit').value     = c.laufzeit     || '';
+        document.getElementById('d-startdatum').value   = c.startDatum   || '';
+        document.getElementById('d-waehrung').value     = c.waehrung     || 'EUR';
+      } else {
+        document.getElementById('d-startdatum').value = todayISO().substring(0, 8) + '01';
+      }
+      this.recalc();
+    },
+
+    // Neuberechnung und Dashboard aktualisieren
+    recalc() {
+      const { kaufpreis, eigenkapital, zinsSatz, laufzeit, startDatum, waehrung } = this.readForm();
+      const darlehen = kaufpreis - eigenkapital;
+
+      document.getElementById('d-save-row').classList.remove('hidden');
+
+      if (!kaufpreis || !zinsSatz || !laufzeit || !startDatum || darlehen <= 0) {
+        document.getElementById('d-dashboard').classList.add('hidden');
+        return;
+      }
+
+      const plan   = this.tilgungsplan(darlehen, zinsSatz, laufzeit, startDatum);
+      const rate   = this.annuitaet(darlehen, zinsSatz, laufzeit);
+      const gesamt = plan.reduce((s, p) => s + p.zinsen, 0);
+
+      // Aktueller Monat
+      const idx     = this.currentMonthIndex(plan);
+      const current = plan[idx] || plan[0];
+
+      // Restschuld heute
+      const restschuld = current ? current.restschuld : 0;
+      const getilgt    = darlehen - restschuld;
+      const pct        = Math.round((getilgt / darlehen) * 100);
+
+      // Restlaufzeit in Monaten ab heute
+      const restMonate = plan.length - idx;
+      const restJahre  = Math.floor(restMonate / 12);
+      const restMon    = restMonate % 12;
+
+      // KPIs setzen
+      document.getElementById('d-restschuld').textContent    = fmt(restschuld, waehrung);
+      document.getElementById('d-getilgt-pct').textContent   = `${pct} % getilgt`;
+      document.getElementById('d-progress').style.width      = `${pct}%`;
+      document.getElementById('d-darlehen-betrag').textContent = fmt(darlehen, waehrung);
+      document.getElementById('d-rate').textContent          = fmt(rate, waehrung);
+      document.getElementById('d-gesamtzinsen').textContent  = fmt(gesamt, waehrung);
+
+      const restText = restJahre > 0
+        ? `${restJahre} J ${restMon} M`
+        : `${restMonate} Monate`;
+      document.getElementById('d-restlaufzeit').textContent = restText;
+
+      // Aktueller Monat Split
+      if (current) {
+        const zinsPct = Math.round((current.zinsen / (current.zinsen + current.tilgung)) * 100);
+        const monatStr = current.datum.substring(0, 7).split('-').reverse().join('.');
+        document.getElementById('d-aktuell-monat').textContent = monatStr;
+        document.getElementById('d-aktuell-zins').textContent  = fmt(current.zinsen, waehrung);
+        document.getElementById('d-aktuell-tilg').textContent  = fmt(current.tilgung, waehrung);
+        document.getElementById('d-bar-zins').style.width      = `${zinsPct}%`;
+      }
+
+      // Tilgungsplan (erste 24 Monate)
+      const rows = plan.slice(0, 24).map(p => {
+        const monatStr = p.datum.substring(0, 7).split('-').reverse().join('.');
+        return `<div class="tilgungsplan-row">
+          <span class="col-dat">${monatStr}</span>
+          <span class="col-rate">${fmt(p.rate, waehrung)}</span>
+          <span class="col-zins">${fmt(p.zinsen, waehrung)}</span>
+          <span class="col-tilg">${fmt(p.tilgung, waehrung)}</span>
+          <span class="col-rest">${fmt(p.restschuld, waehrung)}</span>
+        </div>`;
+      }).join('');
+      document.getElementById('d-tilgungsplan').innerHTML = rows;
+
+      document.getElementById('d-dashboard').classList.remove('hidden');
+
+      // Serie-Button-Status pruefen
+      const serienVorhanden = State.serien.some(s => s.darlehenSerie === true);
+      if (serienVorhanden) {
+        document.getElementById('d-serie-status').textContent = 'Serien bereits angelegt.';
+        document.getElementById('d-serie-status').classList.remove('hidden');
+        document.getElementById('d-serie-btn').disabled = true;
+        document.getElementById('d-serie-btn').textContent = 'Serien angelegt';
+      }
+    },
+
+    // Konfiguration in Firestore speichern
+    async saveConfig() {
+      const cfg = this.readForm();
+      const msg = document.getElementById('d-msg');
+      if (!cfg.kaufpreis || !cfg.zinsSatz || !cfg.laufzeit || !cfg.startDatum) {
+        msg.className = 'error-msg mt-1';
+        msg.textContent = 'Bitte alle Felder ausfullen.';
+        msg.classList.remove('hidden');
+        return;
+      }
+      const { db, doc, setDoc } = window._fb;
+      await setDoc(doc(db, `users/${State.user.uid}/settings/darlehen`), cfg);
+      State.darlehenCfg = cfg;
+      msg.className = 'success-msg mt-1';
+      msg.textContent = 'Gespeichert.';
+      msg.classList.remove('hidden');
+      setTimeout(() => msg.classList.add('hidden'), 2000);
+    },
+
+    // Zwei monatliche Serien (Zinsen + Tilgung) anlegen
+    async createSerien() {
+      const { kaufpreis, eigenkapital, zinsSatz, laufzeit, startDatum, waehrung } = this.readForm();
+      const darlehen = kaufpreis - eigenkapital;
+      if (!darlehen || !zinsSatz || !laufzeit || !startDatum) return;
+
+      const plan    = this.tilgungsplan(darlehen, zinsSatz, laufzeit, startDatum);
+      const current = plan[this.currentMonthIndex(plan)] || plan[0];
+
+      const btn = document.getElementById('d-serie-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        const { db, collection, addDoc } = window._fb;
+        const uid = State.user.uid;
+
+        const baseSerie = {
+          typ: 'ausgabe',
+          waehrung,
+          startDatum,
+          wiederholung: 'monatlich',
+          darlehenSerie: true,
+          createdAt: new Date().toISOString()
+        };
+
+        // Serie Zinsen
+        const serieZins = {
+          ...baseSerie,
+          kategorie: 'Hypothekarzinsen / Schuldzinsen',
+          betrag: parseFloat(current.zinsen.toFixed(2)),
+          notiz: `Annuitat Zinsen (Start: ${fmt(current.zinsen, waehrung)})`
+        };
+        const refZ = await addDoc(collection(db, `users/${uid}/serien`), serieZins);
+        State.serien.push({ id: refZ.id, ...serieZins });
+
+        // Serie Tilgung
+        const serieTilg = {
+          ...baseSerie,
+          kategorie: 'Instandhaltungsrucklage',
+          betrag: parseFloat(current.tilgung.toFixed(2)),
+          notiz: `Annuitat Tilgung (Start: ${fmt(current.tilgung, waehrung)})`
+        };
+        // Tilgung als eigene Kategorie
+        serieTilg.kategorie = 'Tilgung';
+        const refT = await addDoc(collection(db, `users/${uid}/serien`), serieTilg);
+        State.serien.push({ id: refT.id, ...serieTilg });
+
+        // Buchungen sofort erzeugen (syncSerien fuer diese beiden)
+        await syncSerien();
+        await loadBuchungen();
+
+        document.getElementById('d-serie-status').textContent = 'Serien erfolgreich angelegt.';
+        document.getElementById('d-serie-status').classList.remove('hidden');
+        btn.textContent = 'Serien angelegt';
+
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Zinsen + Tilgung als Serien anlegen';
+        alert('Fehler: ' + e.message);
+      }
     }
   },
 
@@ -846,6 +1457,86 @@ const App = {
     msg.className = 'success-msg mt-1';
     msg.textContent = 'Gespeichert.';
     setTimeout(() => msg.classList.add('hidden'), 2000);
+  },
+
+  // ── Serien ───────────────────────────────────────────────────────────────
+  renderSerien() {
+    const container = document.getElementById('serien-list');
+    if (State.serien.length === 0) {
+      container.innerHTML = '<p class="muted text-sm" style="text-align:center;padding:2rem 0;">Keine wiederkehrenden Buchungen vorhanden.</p>';
+      return;
+    }
+
+    const wdhLabel = { monatlich: 'Monatlich', jaehrlich: 'Jahrlich' };
+
+    // Aktive zuerst, dann gestoppte
+    const sorted = [...State.serien].sort((a, b) => {
+      const aGestoppt = a.stoppDatum ? 1 : 0;
+      const bGestoppt = b.stoppDatum ? 1 : 0;
+      return aGestoppt - bGestoppt || b.startDatum.localeCompare(a.startDatum);
+    });
+
+    const pauseIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+    const trashIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+
+    const html = '<div class="serie-card">' +
+      sorted.map(s => {
+        const gestoppt = !!s.stoppDatum;
+        const badge = gestoppt
+          ? `<span class="serie-status-badge gestoppt">Gestoppt ab ${fmtDate(s.stoppDatum)}</span>`
+          : `<span class="serie-status-badge aktiv">Aktiv</span>`;
+
+    const stopBtn = gestoppt
+          ? null
+          : `<button class="serie-stop-btn" onclick="App.stopSerie('${s.id}')" title="Serie stoppen">${pauseIcon}</button>`;
+
+        return `
+        <div class="serie-item${gestoppt ? ' gestoppt' : ''}">
+          <div class="buchung-dot ${s.typ === 'einnahme' ? 'income' : 'expense'}" style="margin-top:.5rem;"></div>
+          <div class="serie-info">
+            <div class="serie-kategorie">${s.kategorie}</div>
+            <div class="serie-meta">${wdhLabel[s.wiederholung]} · ab ${fmtDate(s.startDatum)}${s.notiz ? ' · ' + s.notiz : ''}</div>
+            ${badge}
+          </div>
+          <div style="display:flex;align-items:center;gap:.25rem;">
+            <div class="serie-betrag ${s.typ === 'einnahme' ? 'income' : 'expense'}" style="margin-right:.25rem;">
+              ${s.typ === 'ausgabe' ? '\u2212' : '+'}${fmt(s.betrag, s.waehrung)}
+            </div>
+            ${stopBtn ? stopBtn : ''}
+            <button class="serie-delete-btn" onclick="App.deleteSerie('${s.id}')" title="Serie loschen">${trashIcon}</button>
+          </div>
+        </div>`;
+      }).join('<div class="divider"></div>') +
+    '</div><p class="text-xs muted" style="margin-top:.75rem;text-align:center;">Stoppen beendet neue Buchungen. Bestehende Buchungen bleiben immer unverandert.</p>';
+
+    container.innerHTML = html;
+  },
+
+  async stopSerie(serieId) {
+    const stoppDatum = todayISO();
+    const { db, doc, updateDoc } = window._fb;
+    const uid = State.user.uid;
+    try {
+      await updateDoc(doc(db, `users/${uid}/serien/${serieId}`), { stoppDatum });
+      const idx = State.serien.findIndex(s => s.id === serieId);
+      if (idx >= 0) State.serien[idx].stoppDatum = stoppDatum;
+      App.renderSerien();
+    } catch (e) {
+      alert('Fehler: ' + e.message);
+    }
+  },
+
+  async deleteSerie(serieId) {
+    if (!confirm('Serie endgultig loschen?\n\nAlle bereits erzeugten Buchungen bleiben unverandert erhalten.')) return;
+    const { db, doc, deleteDoc } = window._fb;
+    const uid = State.user.uid;
+    try {
+      await deleteDoc(doc(db, `users/${uid}/serien/${serieId}`));
+      State.serien = State.serien.filter(s => s.id !== serieId);
+      App.renderSerien();
+    } catch (e) {
+      alert('Fehler beim Loschen: ' + e.message);
+    }
   },
 
   logout() {
@@ -880,7 +1571,8 @@ window._boot = function() {
     document.getElementById('app').classList.remove('hidden');
 
     // Load data
-    await Promise.all([loadBuchungen(), loadSettings()]);
+    await Promise.all([loadBuchungen(), loadSettings(), loadSerien(), loadDarlehenCfg()]);
+    await syncSerien();
     App.goto('uebersicht');
   });
 
