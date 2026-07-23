@@ -758,10 +758,13 @@
 
           <!-- Buchungen aus Tilgungsplan erzeugen -->
           <div class="card" style="padding:1.25rem;">
-            <h3 style="margin-bottom:.5rem;">Buchungen erzeugen</h3>
-            <p class="text-sm muted" style="margin-bottom:1rem;">Erzeugt fur jeden Monat eine eigene Buchung fur Zinsen und Tilgung mit dem exakt berechneten Betrag — die Aufteilung verschiebt sich monatlich automatisch.</p>
-            <div id="d-serie-status" class="hidden text-sm success-msg" style="margin-bottom:.75rem;"></div>
-            <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.createBuchungen()">Zinsen &amp; Tilgung als Buchungen anlegen</button>
+            <h3 style="margin-bottom:.5rem;">Kreditbuchungen</h3>
+            <p class="text-sm muted" style="margin-bottom:1rem;">Beim Aktualisieren werden alle Monate bis heute mit den korrekt berechneten Zinsen und Tilgungsbetraegen eingetragen — sinkende Zinsen, steigende Tilgung.</p>
+            <div id="d-serie-status" class="hidden text-sm" style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;"></div>
+            <div class="stack" style="gap:.625rem;">
+              <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.syncBuchungen()">Kreditbuchungen aktualisieren</button>
+              <button class="btn btn-danger" id="d-delete-btn" onclick="App.darlehen.deleteAllBuchungen()">Alle Kreditbuchungen loeschen</button>
+            </div>
           </div>
 
           <!-- Sondertilgungen -->
@@ -1619,13 +1622,11 @@ const App = {
 
       document.getElementById('d-dashboard').classList.remove('hidden');
 
-      // Darlehen-Buchungen bereits vorhanden? → Button auf "Aktualisieren" umschalten
-      const darlehenBuchungenVorhanden = State.buchungen.some(b => b.darlehenBuchung === true);
-      if (darlehenBuchungenVorhanden) {
-        document.getElementById('d-serie-status').textContent = 'Buchungen vorhanden – neue Monate werden beim Klick nachgebucht.';
-        document.getElementById('d-serie-status').classList.remove('hidden');
-        document.getElementById('d-serie-btn').disabled = false;
-        document.getElementById('d-serie-btn').textContent = 'Zinsen & Tilgung aktualisieren';
+      // Anzahl vorhandener Kreditbuchungen anzeigen (kein Sperren mehr)
+      const anzahlKredit = State.buchungen.filter(b => b.darlehenBuchung === true).length;
+      if (anzahlKredit > 0) {
+        const monate = Math.round(anzahlKredit / 2);
+        this._setStatus(`${monate} Monate bereits eingetragen. Aktualisieren fuer neue Monate.`, false);
       }
     },
 
@@ -1697,63 +1698,110 @@ const App = {
       setTimeout(() => msg.classList.add('hidden'), 2000);
     },
 
-    // Erzeugt einzelne Buchungen fur jeden Monat direkt aus dem Tilgungsplan
-    // Bereits vorhandene Monate werden übersprungen; fehlende Monate werden nachgebucht.
-    async createBuchungen() {
+    // Hilfsfunktion: Status-Banner anzeigen
+    _setStatus(text, isError) {
+      const el = document.getElementById('d-serie-status');
+      el.textContent = text;
+      el.style.background = isError ? 'var(--danger-l)' : 'var(--accent-l)';
+      el.style.color = isError ? 'var(--danger)' : 'var(--income)';
+      el.classList.remove('hidden');
+    },
+
+    // Alle Kreditbuchungen loeschen (rueckwirkend)
+    async deleteAllBuchungen() {
+      const vorhandene = State.buchungen.filter(b => b.darlehenBuchung === true);
+      if (vorhandene.length === 0) {
+        this._setStatus('Keine Kreditbuchungen vorhanden.', false);
+        return;
+      }
+      if (!confirm(`Wirklich alle ${vorhandene.length} Kreditbuchungen (Zinsen + Tilgung) loeschen?\n\nDiese Aktion kann nicht rueckgaengig gemacht werden.`)) return;
+
+      const delBtn = document.getElementById('d-delete-btn');
+      const syncBtn = document.getElementById('d-serie-btn');
+      delBtn.disabled = true;
+      syncBtn.disabled = true;
+      delBtn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        const { db, doc, deleteDoc } = window._fb;
+        const uid = State.user.uid;
+
+        for (const b of vorhandene) {
+          await deleteDoc(doc(db, `users/${uid}/buchungen/${b.id}`));
+        }
+
+        // Aus State entfernen
+        State.buchungen = State.buchungen.filter(b => b.darlehenBuchung !== true);
+        State.buchungen.sort((a, b) => b.datum.localeCompare(a.datum));
+
+        this._setStatus(`${vorhandene.length} Kreditbuchungen geloescht.`, false);
+        delBtn.disabled = false;
+        syncBtn.disabled = false;
+        delBtn.textContent = 'Alle Kreditbuchungen loeschen';
+        syncBtn.textContent = 'Kreditbuchungen aktualisieren';
+
+      } catch (e) {
+        delBtn.disabled = false;
+        syncBtn.disabled = false;
+        delBtn.textContent = 'Alle Kreditbuchungen loeschen';
+        this._setStatus('Fehler beim Loeschen: ' + e.message, true);
+      }
+    },
+
+    // Synchronisiert Kreditbuchungen: fehlende Monate werden angelegt, vorhandene uebersprungen
+    async syncBuchungen() {
       const { darlehen, zinsSatz, annuitaet, ersteZinsen, startDatum, waehrung } = this.readForm();
-      if (!darlehen || !zinsSatz || !annuitaet || !startDatum) return;
+      if (!darlehen || !zinsSatz || !annuitaet || !startDatum) {
+        this._setStatus('Bitte zuerst Darlehenskonfiguration ausfuellen und speichern.', true);
+        return;
+      }
 
       const plan = this.tilgungsplan(darlehen, zinsSatz, annuitaet, startDatum, ersteZinsen, State.sondertilgungen);
       if (!plan.length) return;
 
-      const btn = document.getElementById('d-serie-btn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>';
+      const syncBtn = document.getElementById('d-serie-btn');
+      const delBtn  = document.getElementById('d-delete-btn');
+      syncBtn.disabled = true;
+      delBtn.disabled  = true;
+      syncBtn.innerHTML = '<span class="spinner"></span>';
 
       try {
         const { db, collection, addDoc } = window._fb;
         const uid   = State.user.uid;
         const today = todayISO();
 
-        // Alle bereits vorhandenen Darlehens-Buchungsdaten als Set (YYYY-MM-DD → Set)
-        // pro Datum prüfen ob Zinsen UND Tilgung schon vorhanden
-        const vorhandenZinsen = new Set(
-          State.buchungen
-            .filter(b => b.darlehenBuchung === true && b.kategorie === 'Hypothekarzinsen / Schuldzinsen')
-            .map(b => b.datum)
+        // Bereits vorhandene Kreditbuchungen nach Datum+Kategorie indizieren
+        const vorhandenZinsen  = new Set(
+          State.buchungen.filter(b => b.darlehenBuchung === true && b.kategorie === 'Hypothekarzinsen / Schuldzinsen').map(b => b.datum)
         );
         const vorhandenTilgung = new Set(
-          State.buchungen
-            .filter(b => b.darlehenBuchung === true && b.kategorie === 'Tilgung')
-            .map(b => b.datum)
+          State.buchungen.filter(b => b.darlehenBuchung === true && b.kategorie === 'Tilgung').map(b => b.datum)
         );
 
-        let count = 0;
+        let neu = 0;
         for (const p of plan) {
-          // Nur Monate bis heute anlegen (zukünftige werden nicht vorausgebucht)
-          if (p.datum > today) break;
+          if (p.datum > today) break; // keine Zukunfts-Buchungen
 
-          // Zinsen-Buchung – überspringen wenn bereits vorhanden
           if (!vorhandenZinsen.has(p.datum)) {
-            const zinsBuchung = {
+            const b = {
               typ: 'ausgabe',
               kategorie: 'Hypothekarzinsen / Schuldzinsen',
               betrag: parseFloat(p.zinsen.toFixed(2)),
               waehrung,
               datum: p.datum,
-              notiz: `Zinsen (Restschuld ${fmt(p.restschuld + p.tilgung, waehrung)})`,
+              notiz: `Zinsen (Restschuld vorher ${fmt(p.restschuld + p.tilgung, waehrung)})`,
               fotoURL: null,
               darlehenBuchung: true,
               createdAt: new Date().toISOString()
             };
-            const refZ = await addDoc(collection(db, `users/${uid}/buchungen`), zinsBuchung);
-            State.buchungen.push({ id: refZ.id, ...zinsBuchung });
+            const ref = await addDoc(collection(db, `users/${uid}/buchungen`), b);
+            State.buchungen.push({ id: ref.id, ...b });
             vorhandenZinsen.add(p.datum);
+            neu++;
           }
 
-          // Tilgungs-Buchung – überspringen wenn bereits vorhanden
           if (!vorhandenTilgung.has(p.datum)) {
-            const tilgBuchung = {
+            const b = {
               typ: 'ausgabe',
               kategorie: 'Tilgung',
               betrag: parseFloat(p.tilgung.toFixed(2)),
@@ -1764,30 +1812,31 @@ const App = {
               darlehenBuchung: true,
               createdAt: new Date().toISOString()
             };
-            const refT = await addDoc(collection(db, `users/${uid}/buchungen`), tilgBuchung);
-            State.buchungen.push({ id: refT.id, ...tilgBuchung });
+            const ref = await addDoc(collection(db, `users/${uid}/buchungen`), b);
+            State.buchungen.push({ id: ref.id, ...b });
             vorhandenTilgung.add(p.datum);
+            neu++;
           }
-
-          count++;
         }
 
         State.buchungen.sort((a, b) => b.datum.localeCompare(a.datum));
 
-        const statusEl = document.getElementById('d-serie-status');
-        if (count > 0) {
-          statusEl.textContent = `${count} Monate angelegt / aktualisiert.`;
+        const total = State.buchungen.filter(b => b.darlehenBuchung === true).length / 2;
+        if (neu > 0) {
+          this._setStatus(`${neu / 2} neue Monate eingetragen (gesamt ${Math.round(total)} Monate).`, false);
         } else {
-          statusEl.textContent = 'Alle Monate sind bereits vorhanden.';
+          this._setStatus('Alle Monate bereits vorhanden – nichts zu tun.', false);
         }
-        statusEl.classList.remove('hidden');
-        btn.disabled = false;
-        btn.textContent = 'Zinsen & Tilgung aktualisieren';
+        syncBtn.disabled = false;
+        delBtn.disabled  = false;
+        syncBtn.textContent = 'Kreditbuchungen aktualisieren';
+        delBtn.textContent  = 'Alle Kreditbuchungen loeschen';
 
       } catch (e) {
-        btn.disabled = false;
-        btn.textContent = 'Zinsen & Tilgung als Buchungen anlegen';
-        alert('Fehler: ' + e.message);
+        syncBtn.disabled = false;
+        delBtn.disabled  = false;
+        syncBtn.textContent = 'Kreditbuchungen aktualisieren';
+        this._setStatus('Fehler: ' + e.message, true);
       }
     }
   },
@@ -1924,6 +1973,41 @@ window._boot = function() {
     // Load data
     await Promise.all([loadBuchungen(), loadSettings(), loadSerien(), loadDarlehenCfg()]);
     await syncSerien();
+
+    // Kreditbuchungen automatisch aktualisieren falls Darlehen konfiguriert
+    if (State.darlehenCfg && State.darlehenCfg.zinsSatz && State.darlehenCfg.annuitaet && State.darlehenCfg.startDatum) {
+      // Im Hintergrund: fehlende Monate nachbuchen (ohne UI-Feedback beim Start)
+      try {
+        const cfg = State.darlehenCfg;
+        const gesamtbedarf = (cfg.kaufpreis || 0) + (cfg.nebenkosten || (cfg.gst||0) + (cfg.makler||0) + (cfg.notar||0));
+        const darlehen = Math.max(0, gesamtbedarf - (cfg.eigenkapital || 0));
+        if (darlehen > 0) {
+          const plan = App.darlehen.tilgungsplan(darlehen, cfg.zinsSatz, cfg.annuitaet, cfg.startDatum, cfg.ersteZinsen || 0, State.sondertilgungen);
+          const today = todayISO();
+          const { db, collection, addDoc } = window._fb;
+          const uid = State.user.uid;
+          const vorhandenZinsen  = new Set(State.buchungen.filter(b => b.darlehenBuchung === true && b.kategorie === 'Hypothekarzinsen / Schuldzinsen').map(b => b.datum));
+          const vorhandenTilgung = new Set(State.buchungen.filter(b => b.darlehenBuchung === true && b.kategorie === 'Tilgung').map(b => b.datum));
+          for (const p of plan) {
+            if (p.datum > today) break;
+            if (!vorhandenZinsen.has(p.datum)) {
+              const b = { typ:'ausgabe', kategorie:'Hypothekarzinsen / Schuldzinsen', betrag:parseFloat(p.zinsen.toFixed(2)), waehrung:cfg.waehrung||'EUR', datum:p.datum, notiz:`Zinsen (Restschuld vorher ${fmt(p.restschuld+p.tilgung,cfg.waehrung||'EUR')})`, fotoURL:null, darlehenBuchung:true, createdAt:new Date().toISOString() };
+              const ref = await addDoc(collection(db,`users/${uid}/buchungen`),b);
+              State.buchungen.push({id:ref.id,...b});
+              vorhandenZinsen.add(p.datum);
+            }
+            if (!vorhandenTilgung.has(p.datum)) {
+              const b = { typ:'ausgabe', kategorie:'Tilgung', betrag:parseFloat(p.tilgung.toFixed(2)), waehrung:cfg.waehrung||'EUR', datum:p.datum, notiz:`Tilgung (Restschuld danach ${fmt(p.restschuld,cfg.waehrung||'EUR')})`, fotoURL:null, darlehenBuchung:true, createdAt:new Date().toISOString() };
+              const ref = await addDoc(collection(db,`users/${uid}/buchungen`),b);
+              State.buchungen.push({id:ref.id,...b});
+              vorhandenTilgung.add(p.datum);
+            }
+          }
+          State.buchungen.sort((a,b) => b.datum.localeCompare(a.datum));
+        }
+      } catch(e) { console.warn('Auto-Sync Kreditbuchungen fehlgeschlagen:', e); }
+    }
+
     App.goto('uebersicht');
   });
 
