@@ -761,7 +761,7 @@
             <h3 style="margin-bottom:.5rem;">Buchungen erzeugen</h3>
             <p class="text-sm muted" style="margin-bottom:1rem;">Erzeugt fur jeden Monat eine eigene Buchung fur Zinsen und Tilgung mit dem exakt berechneten Betrag — die Aufteilung verschiebt sich monatlich automatisch.</p>
             <div id="d-serie-status" class="hidden text-sm success-msg" style="margin-bottom:.75rem;"></div>
-            <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.createBuchungen()">Zinsen & Tilgung als Buchungen anlegen</button>
+            <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.createBuchungen()">Zinsen &amp; Tilgung als Buchungen anlegen</button>
           </div>
 
           <!-- Sondertilgungen -->
@@ -1619,13 +1619,13 @@ const App = {
 
       document.getElementById('d-dashboard').classList.remove('hidden');
 
-      // Darlehen-Buchungen bereits vorhanden?
+      // Darlehen-Buchungen bereits vorhanden? → Button auf "Aktualisieren" umschalten
       const darlehenBuchungenVorhanden = State.buchungen.some(b => b.darlehenBuchung === true);
       if (darlehenBuchungenVorhanden) {
-        document.getElementById('d-serie-status').textContent = 'Buchungen bereits angelegt.';
+        document.getElementById('d-serie-status').textContent = 'Buchungen vorhanden – neue Monate werden beim Klick nachgebucht.';
         document.getElementById('d-serie-status').classList.remove('hidden');
-        document.getElementById('d-serie-btn').disabled = true;
-        document.getElementById('d-serie-btn').textContent = 'Buchungen angelegt';
+        document.getElementById('d-serie-btn').disabled = false;
+        document.getElementById('d-serie-btn').textContent = 'Zinsen & Tilgung aktualisieren';
       }
     },
 
@@ -1698,6 +1698,7 @@ const App = {
     },
 
     // Erzeugt einzelne Buchungen fur jeden Monat direkt aus dem Tilgungsplan
+    // Bereits vorhandene Monate werden übersprungen; fehlende Monate werden nachgebucht.
     async createBuchungen() {
       const { darlehen, zinsSatz, annuitaet, ersteZinsen, startDatum, waehrung } = this.readForm();
       if (!darlehen || !zinsSatz || !annuitaet || !startDatum) return;
@@ -1714,40 +1715,59 @@ const App = {
         const uid   = State.user.uid;
         const today = todayISO();
 
+        // Alle bereits vorhandenen Darlehens-Buchungsdaten als Set (YYYY-MM-DD → Set)
+        // pro Datum prüfen ob Zinsen UND Tilgung schon vorhanden
+        const vorhandenZinsen = new Set(
+          State.buchungen
+            .filter(b => b.darlehenBuchung === true && b.kategorie === 'Hypothekarzinsen / Schuldzinsen')
+            .map(b => b.datum)
+        );
+        const vorhandenTilgung = new Set(
+          State.buchungen
+            .filter(b => b.darlehenBuchung === true && b.kategorie === 'Tilgung')
+            .map(b => b.datum)
+        );
+
         let count = 0;
         for (const p of plan) {
-          // Nur Monate bis heute anlegen (zukuenftige werden nicht vorausgebucht)
+          // Nur Monate bis heute anlegen (zukünftige werden nicht vorausgebucht)
           if (p.datum > today) break;
 
-          // Zinsen-Buchung
-          const zinsBuchung = {
-            typ: 'ausgabe',
-            kategorie: 'Hypothekarzinsen / Schuldzinsen',
-            betrag: parseFloat(p.zinsen.toFixed(2)),
-            waehrung,
-            datum: p.datum,
-            notiz: `Zinsen (Restschuld ${fmt(p.restschuld + p.tilgung, waehrung)})`,
-            fotoURL: null,
-            darlehenBuchung: true,
-            createdAt: new Date().toISOString()
-          };
-          const refZ = await addDoc(collection(db, `users/${uid}/buchungen`), zinsBuchung);
-          State.buchungen.push({ id: refZ.id, ...zinsBuchung });
+          // Zinsen-Buchung – überspringen wenn bereits vorhanden
+          if (!vorhandenZinsen.has(p.datum)) {
+            const zinsBuchung = {
+              typ: 'ausgabe',
+              kategorie: 'Hypothekarzinsen / Schuldzinsen',
+              betrag: parseFloat(p.zinsen.toFixed(2)),
+              waehrung,
+              datum: p.datum,
+              notiz: `Zinsen (Restschuld ${fmt(p.restschuld + p.tilgung, waehrung)})`,
+              fotoURL: null,
+              darlehenBuchung: true,
+              createdAt: new Date().toISOString()
+            };
+            const refZ = await addDoc(collection(db, `users/${uid}/buchungen`), zinsBuchung);
+            State.buchungen.push({ id: refZ.id, ...zinsBuchung });
+            vorhandenZinsen.add(p.datum);
+          }
 
-          // Tilgungs-Buchung
-          const tilgBuchung = {
-            typ: 'ausgabe',
-            kategorie: 'Tilgung',
-            betrag: parseFloat(p.tilgung.toFixed(2)),
-            waehrung,
-            datum: p.datum,
-            notiz: `Tilgung (Restschuld danach ${fmt(p.restschuld, waehrung)})`,
-            fotoURL: null,
-            darlehenBuchung: true,
-            createdAt: new Date().toISOString()
-          };
-          const refT = await addDoc(collection(db, `users/${uid}/buchungen`), tilgBuchung);
-          State.buchungen.push({ id: refT.id, ...tilgBuchung });
+          // Tilgungs-Buchung – überspringen wenn bereits vorhanden
+          if (!vorhandenTilgung.has(p.datum)) {
+            const tilgBuchung = {
+              typ: 'ausgabe',
+              kategorie: 'Tilgung',
+              betrag: parseFloat(p.tilgung.toFixed(2)),
+              waehrung,
+              datum: p.datum,
+              notiz: `Tilgung (Restschuld danach ${fmt(p.restschuld, waehrung)})`,
+              fotoURL: null,
+              darlehenBuchung: true,
+              createdAt: new Date().toISOString()
+            };
+            const refT = await addDoc(collection(db, `users/${uid}/buchungen`), tilgBuchung);
+            State.buchungen.push({ id: refT.id, ...tilgBuchung });
+            vorhandenTilgung.add(p.datum);
+          }
 
           count++;
         }
@@ -1755,9 +1775,14 @@ const App = {
         State.buchungen.sort((a, b) => b.datum.localeCompare(a.datum));
 
         const statusEl = document.getElementById('d-serie-status');
-        statusEl.textContent = `${count} Monate angelegt (${count * 2} Buchungen).`;
+        if (count > 0) {
+          statusEl.textContent = `${count} Monate angelegt / aktualisiert.`;
+        } else {
+          statusEl.textContent = 'Alle Monate sind bereits vorhanden.';
+        }
         statusEl.classList.remove('hidden');
-        btn.textContent = 'Buchungen angelegt';
+        btn.disabled = false;
+        btn.textContent = 'Zinsen & Tilgung aktualisieren';
 
       } catch (e) {
         btn.disabled = false;
