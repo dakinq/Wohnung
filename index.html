@@ -759,10 +759,10 @@
           <!-- Buchungen aus Tilgungsplan erzeugen -->
           <div class="card" style="padding:1.25rem;">
             <h3 style="margin-bottom:.5rem;">Kreditbuchungen</h3>
-            <p class="text-sm muted" style="margin-bottom:1rem;">Beim Aktualisieren werden alle Monate bis heute mit den korrekt berechneten Zinsen und Tilgungsbetraegen eingetragen — sinkende Zinsen, steigende Tilgung.</p>
+            <p class="text-sm muted" style="margin-bottom:1rem;">Nach einer Sondertilgung oder Aenderung: Neu berechnen loescht alle alten Buchungen und legt sie mit den korrekten Betraegen neu an.</p>
             <div id="d-serie-status" class="hidden text-sm" style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;"></div>
             <div class="stack" style="gap:.625rem;">
-              <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.syncBuchungen()">Kreditbuchungen aktualisieren</button>
+              <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.resetUndSync()">Kreditbuchungen neu berechnen</button>
               <button class="btn btn-danger" id="d-delete-btn" onclick="App.darlehen.deleteAllBuchungen()">Alle Kreditbuchungen loeschen</button>
             </div>
           </div>
@@ -1748,7 +1748,35 @@ const App = {
       }
     },
 
-    // Synchronisiert Kreditbuchungen: fehlende Monate werden angelegt, vorhandene uebersprungen
+    // Loescht alle Kreditbuchungen und berechnet sie komplett neu
+    async resetUndSync() {
+      const vorhandene = State.buchungen.filter(b => b.darlehenBuchung === true);
+      if (vorhandene.length > 0) {
+        const syncBtn = document.getElementById('d-serie-btn');
+        const delBtn  = document.getElementById('d-delete-btn');
+        syncBtn.disabled = true;
+        delBtn.disabled  = true;
+        syncBtn.innerHTML = '<span class="spinner"></span>';
+        try {
+          const { db, doc, deleteDoc } = window._fb;
+          const uid = State.user.uid;
+          for (const b of vorhandene) {
+            await deleteDoc(doc(db, `users/${uid}/buchungen/${b.id}`));
+          }
+          State.buchungen = State.buchungen.filter(b => b.darlehenBuchung !== true);
+        } catch(e) {
+          document.getElementById('d-serie-btn').disabled = false;
+          document.getElementById('d-delete-btn').disabled = false;
+          document.getElementById('d-serie-btn').textContent = 'Kreditbuchungen neu berechnen';
+          this._setStatus('Fehler beim Loeschen: ' + e.message, true);
+          return;
+        }
+      }
+      // Jetzt neu anlegen
+      await this.syncBuchungen();
+    },
+
+    // Legt fehlende Monate an (vorhandene werden uebersprungen)
     async syncBuchungen() {
       const { darlehen, zinsSatz, annuitaet, ersteZinsen, startDatum, waehrung } = this.readForm();
       if (!darlehen || !zinsSatz || !annuitaet || !startDatum) {
