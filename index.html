@@ -558,6 +558,13 @@
           <button class="btn btn-secondary" onclick="App.goto('serien')">Serien verwalten</button>
         </div>
 
+        <div class="card" style="padding:1.25rem;border:1.5px solid var(--danger);">
+          <h3 style="margin-bottom:.5rem;color:var(--danger);">Gefahrenzone</h3>
+          <p class="text-sm muted" style="margin-bottom:1rem;">Alle Buchungen unwiderruflich loeschen. Serien, Einstellungen und Darlehenskonfiguration bleiben erhalten.</p>
+          <div id="delete-all-status" class="hidden text-sm" style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;"></div>
+          <button class="btn btn-danger" id="delete-all-btn" onclick="App.deleteAllBuchungen()">Alle Buchungen loeschen</button>
+        </div>
+
         <p class="muted text-xs" style="text-align:center;">PDF-Export kommt in Phase 4.</p>
       </div>
     </div>
@@ -1969,6 +1976,48 @@ const App = {
 
   logout() {
     window._fb.signOut(window._fb.auth);
+  },
+
+  async deleteAllBuchungen() {
+    const total = State.buchungen.length;
+    if (total === 0) {
+      const el = document.getElementById('delete-all-status');
+      el.textContent = 'Keine Buchungen vorhanden.';
+      el.style.background = 'var(--accent-l)';
+      el.style.color = 'var(--income)';
+      el.classList.remove('hidden');
+      return;
+    }
+    if (!confirm(`Wirklich ALLE ${total} Buchungen loeschen?\n\nDiese Aktion kann nicht rueckgaengig gemacht werden.`)) return;
+
+    const btn = document.getElementById('delete-all-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const { db, doc, deleteDoc } = window._fb;
+      const uid = State.user.uid;
+      for (const b of State.buchungen) {
+        await deleteDoc(doc(db, `users/${uid}/buchungen/${b.id}`));
+      }
+      State.buchungen = [];
+
+      const el = document.getElementById('delete-all-status');
+      el.textContent = `${total} Buchungen geloescht.`;
+      el.style.background = 'var(--accent-l)';
+      el.style.color = 'var(--income)';
+      el.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Alle Buchungen loeschen';
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = 'Alle Buchungen loeschen';
+      const el = document.getElementById('delete-all-status');
+      el.textContent = 'Fehler: ' + e.message;
+      el.style.background = 'var(--danger-l, #fdecea)';
+      el.style.color = 'var(--danger)';
+      el.classList.remove('hidden');
+    }
   }
 };
 
