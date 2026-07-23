@@ -189,7 +189,7 @@
       background: var(--danger-l); border-radius: 6px; padding: .625rem .75rem;
     }
     .success-msg {
-      font-size: .8125rem; color: var(--income);
+      font-size: .8125rem; color: #1a4731;
       background: var(--accent-l); border-radius: 6px; padding: .625rem .75rem;
     }
 
@@ -778,11 +778,17 @@
           <div class="card" style="padding:1.25rem;">
             <h3 style="margin-bottom:.25rem;">Sondertilgungen</h3>
             <p class="text-sm muted" style="margin-bottom:1rem;">Einmalige Zusatzzahlungen reduzieren die Restschuld und verkurzen die Laufzeit.</p>
-            <div id="d-sonder-list" class="stack" style="margin-bottom:.875rem;"></div>
-            <div class="row" style="gap:.5rem;">
-              <input id="d-sonder-datum" type="month" style="flex:1;" />
-              <input id="d-sonder-betrag" type="number" inputmode="decimal" placeholder="Betrag" min="0" step="100" style="flex:1;" />
-              <button class="btn btn-secondary" style="white-space:nowrap;" onclick="App.darlehen.addSondertilgung()">Hinzufugen</button>
+            <div id="d-sonder-list" class="stack" style="margin-bottom:1rem;"></div>
+            <div class="stack" style="gap:.625rem;">
+              <div class="form-group">
+                <label for="d-sonder-datum">Datum</label>
+                <input id="d-sonder-datum" type="month" />
+              </div>
+              <div class="form-group">
+                <label for="d-sonder-betrag">Betrag</label>
+                <input id="d-sonder-betrag" type="number" inputmode="decimal" placeholder="z.B. 10000" min="0" step="100" />
+              </div>
+              <button class="btn btn-secondary" onclick="App.darlehen.addSondertilgung()">Hinzufuegen</button>
             </div>
           </div>
 
