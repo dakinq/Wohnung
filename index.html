@@ -342,6 +342,61 @@
     .tilgungsplan-row .col-zins { flex: 1; text-align: right; color: #8B5E2B; font-variant-numeric: tabular-nums; }
     .tilgungsplan-row .col-tilg { flex: 1; text-align: right; color: var(--accent); font-variant-numeric: tabular-nums; }
     .tilgungsplan-row .col-rest { flex: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+    /* ── BOOKING MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.45);
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      display: flex; align-items: flex-end; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1; pointer-events: auto;
+    }
+    .modal-sheet {
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      width: 100%; max-width: 480px;
+      max-height: 92dvh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 0 env(safe-area-inset-bottom, 1rem);
+      transform: translateY(100%);
+      transition: transform .25s cubic-bezier(.32,.72,0,1);
+    }
+    .modal-overlay.open .modal-sheet {
+      transform: translateY(0);
+    }
+    .modal-handle {
+      width: 36px; height: 4px; border-radius: 2px;
+      background: var(--border); margin: .75rem auto .5rem;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .5rem 1rem .75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-title { font-size: 1rem; font-weight: 600; }
+    .modal-close {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--border); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 1rem; line-height: 1;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .modal-body { padding: 1rem; }
+
+    /* Plus button in topbar */
+    .plus-btn {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; -webkit-tap-highlight-color: transparent;
+      transition: opacity .15s;
+    }
+    .plus-btn:active { opacity: .8; }
   </style>
 </head>
 <body>
@@ -456,83 +511,7 @@
       </div>
     </div>
 
-    <!-- ── NEU ── -->
-    <div id="page-neu" class="page hidden">
-      <div class="card" style="padding:1.25rem;overflow:hidden;">
-        <div class="stack">
-
-          <!-- Typ -->
-          <div class="form-group">
-            <label>Typ</label>
-            <div class="segment">
-              <button class="seg-btn active" id="typ-ausgabe" onclick="App.setTyp('ausgabe')">Ausgabe</button>
-              <button class="seg-btn" id="typ-einnahme" onclick="App.setTyp('einnahme')">Einnahme</button>
-            </div>
-          </div>
-
-          <!-- Kategorie -->
-          <div class="form-group">
-            <label for="neu-kategorie">Kategorie</label>
-            <select id="neu-kategorie"></select>
-          </div>
-
-          <!-- Betrag + Währung -->
-          <div class="row" style="gap:.75rem;">
-            <div class="form-group" style="flex:1;">
-              <label for="neu-betrag">Betrag</label>
-              <input id="neu-betrag" type="number" inputmode="decimal" placeholder="0.00" min="0" step="0.01" />
-            </div>
-            <div class="form-group" style="width:90px;">
-              <label for="neu-waehrung">Währung</label>
-              <select id="neu-waehrung">
-                <option value="EUR">EUR</option>
-                <option value="CHF">CHF</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Datum -->
-          <div class="form-group">
-            <label for="neu-datum">Datum</label>
-            <input id="neu-datum" type="date" />
-          </div>
-
-          <!-- Wiederkehrend -->
-          <div class="form-group">
-            <label>Wiederkehrend</label>
-            <div class="segment" style="grid-template-columns:repeat(3,1fr);">
-              <button class="seg-btn active" id="wdh-einmalig" onclick="App.setWiederholung('einmalig')">Einmalig</button>
-              <button class="seg-btn" id="wdh-monatlich" onclick="App.setWiederholung('monatlich')">Monatlich</button>
-              <button class="seg-btn" id="wdh-jaehrlich" onclick="App.setWiederholung('jaehrlich')">Jährlich</button>
-            </div>
-          </div>
-
-          <!-- Notiz -->
-          <div class="form-group">
-            <label for="neu-notiz">Notiz (optional)</label>
-            <textarea id="neu-notiz" placeholder="z.B. Rechnung von Hausverwaltung"></textarea>
-          </div>
-
-          <!-- Foto -->
-          <div class="form-group">
-            <label>Beleg (optional)</label>
-            <div class="upload-area" onclick="document.getElementById('neu-foto-input').click()">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto .5rem;display:block;">
-                <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <span class="muted text-sm">Foto auswählen</span>
-              <input id="neu-foto-input" type="file" accept="image/*" capture="environment" style="display:none;" onchange="App.fotoSelected(this)" />
-            </div>
-            <img id="neu-foto-preview" class="photo-preview hidden" />
-            <button id="neu-foto-remove" class="btn-sm hidden" style="margin-top:.5rem;" onclick="App.fotoRemove()">Foto entfernen</button>
-          </div>
-
-          <div id="neu-error" class="error-msg hidden"></div>
-          <button id="neu-save-btn" class="btn btn-primary" onclick="App.saveBuchung()">Speichern</button>
-        </div>
-      </div>
-    </div>
+    <!-- page-neu entfernt → Buchung wird jetzt als Modal geöffnet -->
 
     <!-- ── EINSTELLUNGEN ── -->
     <div id="page-einstellungen" class="page hidden">
@@ -930,12 +909,7 @@
       </svg>
       Buchungen
     </button>
-    <button class="nav-btn" id="nav-neu" onclick="App.goto('neu')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-      </svg>
-      Neu
-    </button>
+    <!-- Neu-Tab entfernt → Plus-Button im Buchungen-Tab -->
     <button class="nav-btn" id="nav-darlehen" onclick="App.goto('darlehen')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
@@ -957,6 +931,93 @@
     </button>
   </nav>
 
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     BUCHUNG MODAL (Pop-up beim Plus-Button im Buchungen-Tab)
+════════════════════════════════════════════════════════════════ -->
+<div id="buchung-modal" class="modal-overlay" onclick="App.modalBgClick(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Neue Buchung</span>
+      <button class="modal-close" onclick="App.closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="stack">
+
+        <!-- Typ -->
+        <div class="form-group">
+          <label>Typ</label>
+          <div class="segment">
+            <button class="seg-btn active" id="typ-ausgabe" onclick="App.setTyp('ausgabe')">Ausgabe</button>
+            <button class="seg-btn" id="typ-einnahme" onclick="App.setTyp('einnahme')">Einnahme</button>
+          </div>
+        </div>
+
+        <!-- Kategorie -->
+        <div class="form-group">
+          <label for="neu-kategorie">Kategorie</label>
+          <select id="neu-kategorie"></select>
+        </div>
+
+        <!-- Betrag + Währung -->
+        <div class="row" style="gap:.75rem;">
+          <div class="form-group" style="flex:1;">
+            <label for="neu-betrag">Betrag</label>
+            <input id="neu-betrag" type="number" inputmode="decimal" placeholder="0.00" min="0" step="0.01" />
+          </div>
+          <div class="form-group" style="width:90px;">
+            <label for="neu-waehrung">Währung</label>
+            <select id="neu-waehrung">
+              <option value="EUR">EUR</option>
+              <option value="CHF">CHF</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Datum -->
+        <div class="form-group">
+          <label for="neu-datum">Datum</label>
+          <input id="neu-datum" type="date" />
+        </div>
+
+        <!-- Wiederkehrend -->
+        <div class="form-group">
+          <label>Wiederkehrend</label>
+          <div class="segment" style="grid-template-columns:repeat(3,1fr);">
+            <button class="seg-btn active" id="wdh-einmalig" onclick="App.setWiederholung('einmalig')">Einmalig</button>
+            <button class="seg-btn" id="wdh-monatlich" onclick="App.setWiederholung('monatlich')">Monatlich</button>
+            <button class="seg-btn" id="wdh-jaehrlich" onclick="App.setWiederholung('jaehrlich')">Jährlich</button>
+          </div>
+        </div>
+
+        <!-- Notiz -->
+        <div class="form-group">
+          <label for="neu-notiz">Notiz (optional)</label>
+          <textarea id="neu-notiz" placeholder="z.B. Rechnung von Hausverwaltung"></textarea>
+        </div>
+
+        <!-- Foto -->
+        <div class="form-group">
+          <label>Beleg (optional)</label>
+          <div class="upload-area" onclick="document.getElementById('neu-foto-input').click()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto .5rem;display:block;">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <span class="muted text-sm">Foto auswählen</span>
+            <input id="neu-foto-input" type="file" accept="image/*" capture="environment" style="display:none;" onchange="App.fotoSelected(this)" />
+          </div>
+          <img id="neu-foto-preview" class="photo-preview hidden" />
+          <button id="neu-foto-remove" class="btn-sm hidden" style="margin-top:.5rem;" onclick="App.fotoRemove()">Foto entfernen</button>
+        </div>
+
+        <div id="neu-error" class="error-msg hidden"></div>
+        <button id="neu-save-btn" class="btn btn-primary" onclick="App.saveBuchung()" style="margin-bottom:.5rem;">Speichern</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1182,20 +1243,45 @@ const App = {
     };
     document.getElementById('topbar-title').textContent = titles[page] || '';
 
-    // Back-Button fuer Unterseiten
+    // Back-Button fuer Unterseiten / Plus-Button fuer Buchungen
     const action = document.getElementById('topbar-action');
     if (page === 'serien') {
       action.innerHTML = `<button class="btn-sm" onclick="App.goto('einstellungen')" style="font-size:.8125rem;">Zurueck</button>`;
+    } else if (page === 'buchungen') {
+      action.innerHTML = `<button class="plus-btn" onclick="App.openModal()" aria-label="Neue Buchung">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>`;
     } else {
       action.innerHTML = '';
     }
 
     if (page === 'uebersicht')  App.renderUebersicht();
     if (page === 'buchungen')   App.renderBuchungen();
-    if (page === 'neu')         App.resetNeu();
     if (page === 'serien')      App.renderSerien();
     if (page === 'darlehen')    App.darlehen.open();
     if (page === 'mieter')      App.mieter.open();
+  },
+
+  // ── Modal ────────────────────────────────────────────────────────────────
+  openModal() {
+    App.resetNeu();
+    const overlay = document.getElementById('buchung-modal');
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    // Auto-focus Betrag
+    setTimeout(() => document.getElementById('neu-betrag').focus(), 300);
+  },
+
+  closeModal() {
+    const overlay = document.getElementById('buchung-modal');
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  },
+
+  modalBgClick(e) {
+    if (e.target === document.getElementById('buchung-modal')) App.closeModal();
   },
 
   // Gemeinsamer Aktualisieren-Button auf der Übersicht
@@ -1361,26 +1447,98 @@ const App = {
 
     const recurringIcon = `<svg class="recurring-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.6"/></svg>`;
 
-    const html = '<div class="card" style="overflow:hidden;">' +
-      State.buchungen.map(b => `
-        <div class="buchung-item">
-          <div class="buchung-dot ${b.typ === 'einnahme' ? 'income' : 'expense'}"></div>
-          <div class="buchung-info">
-            <div class="buchung-kategorie">${b.kategorie}</div>
-            <div class="buchung-datum">${fmtDate(b.datum)}${b.notiz ? ' · ' + b.notiz : ''}</div>
-            ${b.serieId ? `<div class="recurring-badge">${recurringIcon}${b.wiederholung === 'monatlich' ? 'Monatlich' : 'Jahrlich'}</div>` : ''}
-          </div>
-          <div>
-            <div class="buchung-betrag ${b.typ === 'einnahme' ? 'income' : 'expense'}">
-              ${b.typ === 'ausgabe' ? '\u2212' : '+'}${fmt(b.betrag, b.waehrung)}
-            </div>
-            ${b.fotoURL ? `<div style="margin-top:.25rem;text-align:right;"><a href="${b.fotoURL}" target="_blank" style="font-size:.75rem;color:var(--accent);">Beleg</a></div>` : ''}
-          </div>
-        </div>
-      `).join('<div class="divider"></div>') +
-    '</div>';
+    // Kategorien die zu Kreditbuchungen gehören (pro Datum zusammenfassen)
+    const KREDIT_KAT = new Set(['Hypothekarzinsen / Schuldzinsen', 'Tilgung']);
+    // Kategorien die zu Mietbuchungen gehören (pro Datum zusammenfassen)
+    const MIETE_KAT  = new Set(['Kaltmiete', 'Nebenkostenvorauszahlung']);
 
-    list.innerHTML = html;
+    // Schritt 1: Kreditbuchungen nach Datum gruppieren
+    const kreditByDatum = {};
+    const mieteByDatum  = {};
+    const einzeln = [];
+
+    for (const b of State.buchungen) {
+      if (b.darlehenBuchung && KREDIT_KAT.has(b.kategorie)) {
+        if (!kreditByDatum[b.datum]) kreditByDatum[b.datum] = [];
+        kreditByDatum[b.datum].push(b);
+      } else if (b.mieterBuchung && MIETE_KAT.has(b.kategorie)) {
+        if (!mieteByDatum[b.datum]) mieteByDatum[b.datum] = [];
+        mieteByDatum[b.datum].push(b);
+      } else {
+        einzeln.push(b);
+      }
+    }
+
+    // Schritt 2: Gruppen zu virtuellen Zeilen umwandeln
+    const gruppenKredit = Object.entries(kreditByDatum).map(([datum, buchungen]) => ({
+      _gruppe: 'kredit', datum, buchungen,
+      betrag: buchungen.reduce((s, b) => s + b.betrag, 0),
+      waehrung: buchungen[0].waehrung,
+      typ: 'ausgabe'
+    }));
+
+    const gruppenMiete = Object.entries(mieteByDatum).map(([datum, buchungen]) => ({
+      _gruppe: 'miete', datum, buchungen,
+      betrag: buchungen.reduce((s, b) => s + b.betrag, 0),
+      waehrung: buchungen[0].waehrung,
+      typ: 'einnahme'
+    }));
+
+    // Schritt 3: Alles zusammenführen und nach Datum sortieren
+    const alle = [...gruppenKredit, ...gruppenMiete, ...einzeln]
+      .sort((a, b) => b.datum.localeCompare(a.datum));
+
+    // Schritt 4: HTML rendern
+    const renderEinzelBuchung = b => `
+      <div class="buchung-item">
+        <div class="buchung-dot ${b.typ === 'einnahme' ? 'income' : 'expense'}"></div>
+        <div class="buchung-info">
+          <div class="buchung-kategorie">${b.kategorie}</div>
+          <div class="buchung-datum">${fmtDate(b.datum)}${b.notiz ? ' · ' + b.notiz : ''}</div>
+          ${b.serieId ? `<div class="recurring-badge">${recurringIcon}${b.wiederholung === 'monatlich' ? 'Monatlich' : 'Jahrlich'}</div>` : ''}
+        </div>
+        <div>
+          <div class="buchung-betrag ${b.typ === 'einnahme' ? 'income' : 'expense'}">
+            ${b.typ === 'ausgabe' ? '\u2212' : '+'}${fmt(b.betrag, b.waehrung)}
+          </div>
+          ${b.fotoURL ? `<div style="margin-top:.25rem;text-align:right;"><a href="${b.fotoURL}" target="_blank" style="font-size:.75rem;color:var(--accent);">Beleg</a></div>` : ''}
+        </div>
+      </div>`;
+
+    const renderGruppe = (g) => {
+      const isKredit = g._gruppe === 'kredit';
+      const titel    = isKredit ? 'Kreditrate' : 'Mieteinnahmen';
+      const cls      = g.typ === 'einnahme' ? 'income' : 'expense';
+      const sign     = g.typ === 'ausgabe' ? '\u2212' : '+';
+      const subzeilen = g.buchungen.map(b =>
+        `<div class="row-between" style="padding:.2rem 0;">
+          <span class="text-xs muted">${b.kategorie}</span>
+          <span class="text-xs muted tabular">${g.typ === 'ausgabe' ? '\u2212' : '+'}${fmt(b.betrag, b.waehrung)}</span>
+        </div>`
+      ).join('');
+      return `
+        <div class="buchung-item" style="flex-direction:column;align-items:stretch;gap:.4rem;">
+          <div style="display:flex;align-items:center;gap:.75rem;">
+            <div class="buchung-dot ${cls}"></div>
+            <div class="buchung-info">
+              <div class="buchung-kategorie">${titel}</div>
+              <div class="buchung-datum">${fmtDate(g.datum)}</div>
+            </div>
+            <div class="buchung-betrag ${cls}" style="white-space:nowrap;">${sign}${fmt(g.betrag, g.waehrung)}</div>
+          </div>
+          <div style="margin-left:1.5rem;padding:.4rem .6rem;background:var(--bg);border-radius:6px;border:1px solid var(--border);">
+            ${subzeilen}
+          </div>
+        </div>`;
+    };
+
+    const items = alle.map(eintrag =>
+      eintrag._gruppe ? renderGruppe(eintrag) : renderEinzelBuchung(eintrag)
+    );
+
+    list.innerHTML = '<div class="card" style="overflow:hidden;">' +
+      items.join('<div class="divider"></div>') +
+      '</div>';
   },
 
   // ── Neue Buchung ─────────────────────────────────────────────────────────
@@ -1517,9 +1675,11 @@ const App = {
       // Save last used currency
       await setDoc(doc(db, `users/${uid}/settings/main`), { letzteWaehrung: waehr, kurs: State.kurs }, { merge: true });
 
-      // Reload and go back
+      // Reload, close modal and refresh list
       await loadBuchungen();
-      App.goto('buchungen');
+      App.closeModal();
+      if (State.currentPage === 'buchungen') App.renderBuchungen();
+      if (State.currentPage === 'uebersicht') App.renderUebersicht();
 
     } catch (e) {
       console.error(e);
