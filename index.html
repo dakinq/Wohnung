@@ -854,6 +854,11 @@
             <label for="m-start">Mietbeginn</label>
             <input id="m-start" type="month" />
           </div>
+          <div class="form-group">
+            <label for="m-faellig">Fälligkeitstag (Tag des Monats)</label>
+            <input id="m-faellig" type="number" inputmode="numeric" placeholder="z.B. 1" min="1" max="28" step="1" />
+            <div class="text-xs muted" style="margin-top:.3rem;">Buchungen werden auf diesen Tag des Monats datiert (1–28).</div>
+          </div>
           <div id="m-msg" class="hidden"></div>
           <button class="btn btn-primary" onclick="App.mieter.saveConfig()">Konfiguration speichern</button>
         </div>
@@ -862,7 +867,7 @@
       <!-- Mieterhöhungen -->
       <div class="card" style="padding:1.25rem;">
         <h3 style="margin-bottom:.25rem;">Mieterhoehungen</h3>
-        <p class="text-sm muted" style="margin-bottom:1rem;">Ab dem gewaehlten Monat gilt die neue Kaltmiete. Nebenkosten bleiben unveraendert.</p>
+        <p class="text-sm muted" style="margin-bottom:1rem;">Ab dem gewaehlten Monat gelten die neuen Betraege. Buchungen werden beim Neu-Berechnen automatisch angepasst.</p>
         <div id="m-erhoehung-list" class="stack" style="margin-bottom:1rem;"></div>
         <div class="stack" style="gap:.625rem;">
           <div class="form-group">
@@ -870,8 +875,20 @@
             <input id="m-erh-datum" type="month" />
           </div>
           <div class="form-group">
-            <label for="m-erh-betrag">Neue Kaltmiete</label>
-            <input id="m-erh-betrag" type="number" inputmode="decimal" placeholder="z.B. 1300" min="0" step="10" />
+            <label for="m-erh-typ">Was aendert sich?</label>
+            <select id="m-erh-typ" onchange="App.mieter.onErhoehungTypChange()">
+              <option value="kalt">Nur Kaltmiete</option>
+              <option value="neben">Nur Nebenkosten</option>
+              <option value="beide">Kaltmiete &amp; Nebenkosten</option>
+            </select>
+          </div>
+          <div class="form-group" id="m-erh-kalt-wrap">
+            <label for="m-erh-kalt">Neue Kaltmiete</label>
+            <input id="m-erh-kalt" type="number" inputmode="decimal" placeholder="z.B. 1300" min="0" step="10" />
+          </div>
+          <div class="form-group hidden" id="m-erh-neben-wrap">
+            <label for="m-erh-neben">Neue Nebenkosten</label>
+            <input id="m-erh-neben" type="number" inputmode="decimal" placeholder="z.B. 250" min="0" step="10" />
           </div>
           <button class="btn btn-secondary" onclick="App.mieter.addErhoehung()">Hinzufuegen</button>
         </div>
@@ -981,8 +998,8 @@ const State = {
   serien:        [],
   darlehenCfg:   null,
   sondertilgungen: [],
-  mieterCfg:     null,   // { kaltmiete, nebenkosten, waehrung, startDatum }
-  mieterErhoehungen: [], // [{datum:'YYYY-MM', kaltmiete:1300}]
+  mieterCfg:     null,   // { kaltmiete, nebenkosten, waehrung, startDatum, faelligTag }
+  mieterErhoehungen: [], // [{datum:'YYYY-MM', typ:'kalt'|'neben'|'beide', kaltmiete?:1300, nebenkosten?:250}]
   jahr:          new Date().getFullYear(),
   anzeigeWaehrung: 'EUR',
   kurs:          0.94,
@@ -1231,26 +1248,30 @@ const App = {
     try {
       const cfg = State.mieterCfg;
       if (cfg && cfg.kaltmiete && cfg.startDatum) {
+        const faelligTag = Math.min(28, Math.max(1, cfg.faelligTag || 1));
         const today = todayISO();
         const { db, collection, addDoc } = window._fb;
         const uid = State.user.uid;
         let [sy, sm] = cfg.startDatum.split('-').map(Number);
         const [ty, tm] = today.slice(0,7).split('-').map(Number);
-        const vorhandenK = new Set(State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Kaltmiete').map(b => b.datum));
-        const vorhandenN = new Set(State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Nebenkostenvorauszahlung').map(b => b.datum));
+        // Indexieren nach Monat (YYYY-MM) statt vollem Datum
+        const vorhandenK = new Set(State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Kaltmiete').map(b => b.datum.slice(0,7)));
+        const vorhandenN = new Set(State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Nebenkostenvorauszahlung').map(b => b.datum.slice(0,7)));
         while (sy < ty || (sy === ty && sm <= tm)) {
           const monatKey = `${sy}-${String(sm).padStart(2,'0')}`;
-          const datumISO = `${monatKey}-01`;
-          const kaltmiete = App.mieter.kaltmieteAmMonat(monatKey);
-          if (!vorhandenK.has(datumISO)) {
+          const datumISO = `${monatKey}-${String(faelligTag).padStart(2,'0')}`;
+          if (datumISO > today) { sm++; if (sm > 12) { sm = 1; sy++; } continue; }
+          const kaltmiete   = App.mieter.kaltmieteAmMonat(monatKey);
+          const nebenkosten = App.mieter.nebenkostenAmMonat(monatKey);
+          if (!vorhandenK.has(monatKey)) {
             const b = { typ:'einnahme', kategorie:'Kaltmiete', betrag:kaltmiete, waehrung:cfg.waehrung, datum:datumISO, notiz:`Kaltmiete ${monatKey}`, fotoURL:null, mieterBuchung:true, createdAt:new Date().toISOString() };
             const ref = await addDoc(collection(db,`users/${uid}/buchungen`),b);
-            State.buchungen.push({id:ref.id,...b}); vorhandenK.add(datumISO); neuMiete++;
+            State.buchungen.push({id:ref.id,...b}); vorhandenK.add(monatKey); neuMiete++;
           }
-          if (cfg.nebenkosten > 0 && !vorhandenN.has(datumISO)) {
-            const b = { typ:'einnahme', kategorie:'Nebenkostenvorauszahlung', betrag:cfg.nebenkosten, waehrung:cfg.waehrung, datum:datumISO, notiz:`Nebenkosten ${monatKey}`, fotoURL:null, mieterBuchung:true, createdAt:new Date().toISOString() };
+          if (nebenkosten > 0 && !vorhandenN.has(monatKey)) {
+            const b = { typ:'einnahme', kategorie:'Nebenkostenvorauszahlung', betrag:nebenkosten, waehrung:cfg.waehrung, datum:datumISO, notiz:`Nebenkosten ${monatKey}`, fotoURL:null, mieterBuchung:true, createdAt:new Date().toISOString() };
             const ref = await addDoc(collection(db,`users/${uid}/buchungen`),b);
-            State.buchungen.push({id:ref.id,...b}); vorhandenN.add(datumISO); neuMiete++;
+            State.buchungen.push({id:ref.id,...b}); vorhandenN.add(monatKey); neuMiete++;
           }
           sm++; if (sm > 12) { sm = 1; sy++; }
         }
@@ -1260,7 +1281,7 @@ const App = {
     State.buchungen.sort((a, b) => b.datum.localeCompare(a.datum));
     App.renderUebersicht();
 
-    const neuGesamt = Math.round(neuKredit / 2) + Math.round(neuMiete / (State.mieterCfg?.nebenkosten > 0 ? 2 : 1));
+    const neuGesamt = Math.round(neuKredit / 2) + neuMiete;
     if (neuGesamt > 0) _status(`${neuGesamt} neue Monate eingetragen.`, false);
     else _status('Alles aktuell – keine neuen Monate.', false);
 
@@ -2184,13 +2205,23 @@ const App = {
         document.getElementById('m-nebenkosten').value = cfg.nebenkosten || '';
         document.getElementById('m-waehrung').value    = cfg.waehrung    || 'EUR';
         document.getElementById('m-start').value       = cfg.startDatum  || '';
+        document.getElementById('m-faellig').value     = cfg.faelligTag  || 1;
       }
       this.renderErhoehungen();
       this.renderVorschau();
       const anzahl = State.buchungen.filter(b => b.mieterBuchung === true).length;
       if (anzahl > 0) {
-        this._setStatus(`${Math.round(anzahl / 2)} Monate eingetragen.`, false);
+        // Zaehle Kaltmiete-Buchungen als Monatsindikator
+        const kaltAnzahl = State.buchungen.filter(b => b.mieterBuchung === true && b.kategorie === 'Kaltmiete').length;
+        this._setStatus(`${kaltAnzahl} Monate eingetragen.`, false);
       }
+    },
+
+    // Zeigt/versteckt Kaltmiete- und Nebenkosten-Felder je nach Typ
+    onErhoehungTypChange() {
+      const typ = document.getElementById('m-erh-typ').value;
+      document.getElementById('m-erh-kalt-wrap').classList.toggle('hidden',  typ === 'neben');
+      document.getElementById('m-erh-neben-wrap').classList.toggle('hidden', typ === 'kalt');
     },
 
     _setStatus(text, isError) {
@@ -2205,21 +2236,35 @@ const App = {
       const el = document.getElementById('m-erhoehung-list');
       if (!State.mieterErhoehungen.length) { el.innerHTML = '<p class="text-sm muted">Keine Erhoehungen eingetragen.</p>'; return; }
       const sorted = [...State.mieterErhoehungen].sort((a, b) => a.datum.localeCompare(b.datum));
-      el.innerHTML = sorted.map((e, i) => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem .75rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;">
-          <div>
-            <div class="text-sm" style="font-weight:600;">${e.datum.slice(0,7).replace('-', '/')}</div>
-            <div class="text-xs muted">Neue Kaltmiete: ${fmt(e.kaltmiete, State.mieterCfg?.waehrung || 'EUR')}</div>
+      const w = State.mieterCfg?.waehrung || 'EUR';
+      el.innerHTML = sorted.map((e, i) => {
+        const typLabels = { kalt: 'Kaltmiete', neben: 'Nebenkosten', beide: 'Kaltmiete &amp; Nebenkosten' };
+        const typ = e.typ || 'kalt'; // Rueckwaertskompatibel
+        let details = '';
+        if (typ === 'kalt' || typ === 'beide') details += `Kaltmiete: ${fmt(e.kaltmiete || 0, w)}`;
+        if (typ === 'beide') details += ' · ';
+        if (typ === 'neben' || typ === 'beide') details += `Nebenkosten: ${fmt(e.nebenkosten || 0, w)}`;
+        return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem .75rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;gap:.5rem;">
+          <div style="min-width:0;">
+            <div class="row" style="gap:.5rem;flex-wrap:wrap;align-items:center;">
+              <span class="text-sm" style="font-weight:600;">ab ${e.datum.slice(0,7).replace('-','/')}</span>
+              <span style="font-size:.7rem;font-weight:500;color:var(--accent);background:var(--accent-l);border-radius:4px;padding:.1rem .35rem;">${typLabels[typ]}</span>
+            </div>
+            <div class="text-xs muted" style="margin-top:.15rem;">${details}</div>
           </div>
-          <button class="btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="App.mieter.removeErhoehung(${i})">Loeschen</button>
-        </div>`).join('');
+          <button class="btn-sm" style="flex-shrink:0;color:var(--danger);" onclick="App.mieter.removeErhoehung(${i})">Loeschen</button>
+        </div>`;
+      }).join('');
     },
 
     renderVorschau() {
       const cfg = State.mieterCfg;
       if (!cfg) return;
       const today = todayISO().slice(0, 7);
-      const kaltmiete = this.kaltmieteAmMonat(today);
+      const kaltmiete  = this.kaltmieteAmMonat(today);
+      const nebenkosten = this.nebenkostenAmMonat(today);
+      const faelligTag = cfg.faelligTag || 1;
       const el = document.getElementById('m-vorschau');
       const inhalt = document.getElementById('m-vorschau-inhalt');
       el.style.display = 'block';
@@ -2230,11 +2275,15 @@ const App = {
         </div>
         <div style="display:flex;justify-content:space-between;padding:.375rem 0;border-bottom:1px solid var(--border);">
           <span class="text-sm muted">Nebenkosten</span>
-          <span class="text-sm tabular">${fmt(cfg.nebenkosten || 0, cfg.waehrung)}</span>
+          <span class="text-sm tabular">${fmt(nebenkosten, cfg.waehrung)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:.375rem 0;border-bottom:1px solid var(--border);">
+          <span class="text-sm" style="font-weight:600;">Gesamt</span>
+          <span class="text-sm tabular" style="font-weight:700;">${fmt(kaltmiete + nebenkosten, cfg.waehrung)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:.375rem 0;">
-          <span class="text-sm" style="font-weight:600;">Gesamt</span>
-          <span class="text-sm tabular" style="font-weight:700;">${fmt(kaltmiete + (cfg.nebenkosten || 0), cfg.waehrung)}</span>
+          <span class="text-sm muted">Fällig am</span>
+          <span class="text-sm tabular">${faelligTag}. des Monats</span>
         </div>`;
     },
 
@@ -2245,9 +2294,31 @@ const App = {
       let miete = cfg.kaltmiete || 0;
       const sorted = [...State.mieterErhoehungen].sort((a, b) => a.datum.localeCompare(b.datum));
       for (const e of sorted) {
-        if (e.datum <= yyyymm) miete = e.kaltmiete;
+        if (e.datum <= yyyymm) {
+          const typ = e.typ || 'kalt';
+          if ((typ === 'kalt' || typ === 'beide') && e.kaltmiete != null) {
+            miete = e.kaltmiete;
+          }
+        }
       }
       return miete;
+    },
+
+    // Gibt die gueltigen Nebenkosten fuer einen Monat (YYYY-MM) zurueck
+    nebenkostenAmMonat(yyyymm) {
+      const cfg = State.mieterCfg;
+      if (!cfg) return 0;
+      let neben = cfg.nebenkosten || 0;
+      const sorted = [...State.mieterErhoehungen].sort((a, b) => a.datum.localeCompare(b.datum));
+      for (const e of sorted) {
+        if (e.datum <= yyyymm) {
+          const typ = e.typ || 'kalt';
+          if ((typ === 'neben' || typ === 'beide') && e.nebenkosten != null) {
+            neben = e.nebenkosten;
+          }
+        }
+      }
+      return neben;
     },
 
     async saveConfig() {
@@ -2255,6 +2326,7 @@ const App = {
       const nebenkosten = parseFloat(document.getElementById('m-nebenkosten').value) || 0;
       const waehrung    = document.getElementById('m-waehrung').value;
       const startDatum  = document.getElementById('m-start').value;
+      const faelligTag  = Math.min(28, Math.max(1, parseInt(document.getElementById('m-faellig').value) || 1));
 
       const msg = document.getElementById('m-msg');
       if (!kaltmiete || !startDatum) {
@@ -2263,7 +2335,7 @@ const App = {
         return;
       }
 
-      const cfg = { kaltmiete, nebenkosten, waehrung, startDatum, erhoehungen: State.mieterErhoehungen };
+      const cfg = { kaltmiete, nebenkosten, waehrung, startDatum, faelligTag, erhoehungen: State.mieterErhoehungen };
       const { db, doc, setDoc } = window._fb;
       await setDoc(doc(db, `users/${State.user.uid}/settings/mieter`), cfg);
       State.mieterCfg = cfg;
@@ -2276,16 +2348,37 @@ const App = {
     },
 
     addErhoehung() {
-      const datum   = document.getElementById('m-erh-datum').value;
-      const betrag  = parseFloat(document.getElementById('m-erh-betrag').value);
-      if (!datum || !betrag) return;
+      const datum = document.getElementById('m-erh-datum').value;
+      const typ   = document.getElementById('m-erh-typ').value;
+      if (!datum) return;
+
+      const kaltmieteVal   = parseFloat(document.getElementById('m-erh-kalt').value);
+      const nebenkostenVal = parseFloat(document.getElementById('m-erh-neben').value);
+
+      // Validierung je Typ
+      if ((typ === 'kalt' || typ === 'beide') && !kaltmieteVal) {
+        alert('Bitte neue Kaltmiete eingeben.');
+        return;
+      }
+      if ((typ === 'neben' || typ === 'beide') && !nebenkostenVal) {
+        alert('Bitte neue Nebenkosten eingeben.');
+        return;
+      }
+
+      const eintrag = { datum, typ };
+      if (typ === 'kalt'  || typ === 'beide') eintrag.kaltmiete   = kaltmieteVal;
+      if (typ === 'neben' || typ === 'beide') eintrag.nebenkosten = nebenkostenVal;
 
       // Ersetze falls selber Monat schon existiert
       State.mieterErhoehungen = State.mieterErhoehungen.filter(e => e.datum !== datum);
-      State.mieterErhoehungen.push({ datum, kaltmiete: betrag });
+      State.mieterErhoehungen.push(eintrag);
 
+      // Felder zuruecksetzen
       document.getElementById('m-erh-datum').value  = '';
-      document.getElementById('m-erh-betrag').value = '';
+      document.getElementById('m-erh-kalt').value   = '';
+      document.getElementById('m-erh-neben').value  = '';
+      document.getElementById('m-erh-typ').value    = 'kalt';
+      this.onErhoehungTypChange();
 
       // Sofort in Firestore speichern
       if (State.mieterCfg) {
@@ -2363,6 +2456,8 @@ const App = {
         return;
       }
 
+      const faelligTag = Math.min(28, Math.max(1, cfg.faelligTag || 1));
+
       const syncBtn = document.getElementById('m-sync-btn');
       const delBtn  = document.getElementById('m-delete-btn');
       syncBtn.disabled = delBtn.disabled = true;
@@ -2377,28 +2472,41 @@ const App = {
         let [sy, sm] = cfg.startDatum.split('-').map(Number);
         const [ty, tm] = today.slice(0,7).split('-').map(Number);
 
-        const vorhandenKalt  = new Set(State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Kaltmiete').map(b => b.datum));
-        const vorhandenNeben = new Set(State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Nebenkostenvorauszahlung').map(b => b.datum));
+        // Nach Monat (YYYY-MM) indexieren, nicht nach vollem Datum
+        const vorhandenKalt  = new Set(
+          State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Kaltmiete')
+            .map(b => b.datum.slice(0,7))
+        );
+        const vorhandenNeben = new Set(
+          State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Nebenkostenvorauszahlung')
+            .map(b => b.datum.slice(0,7))
+        );
 
         let neu = 0;
         while (sy < ty || (sy === ty && sm <= tm)) {
-          const monatKey  = `${sy}-${String(sm).padStart(2,'0')}`;
-          const datumISO  = `${monatKey}-01`;
-          const kaltmiete = this.kaltmieteAmMonat(monatKey);
+          const monatKey = `${sy}-${String(sm).padStart(2,'0')}`;
+          const tagStr   = String(faelligTag).padStart(2,'0');
+          const datumISO = `${monatKey}-${tagStr}`;
 
-          if (!vorhandenKalt.has(datumISO)) {
+          // Nur buchen wenn der Faelligkeitstag in diesem Monat bereits erreicht ist
+          if (datumISO > today) { sm++; if (sm > 12) { sm = 1; sy++; } continue; }
+
+          const kaltmiete   = this.kaltmieteAmMonat(monatKey);
+          const nebenkosten = this.nebenkostenAmMonat(monatKey);
+
+          if (!vorhandenKalt.has(monatKey)) {
             const b = { typ:'einnahme', kategorie:'Kaltmiete', betrag:kaltmiete, waehrung:cfg.waehrung, datum:datumISO, notiz:`Kaltmiete ${monatKey}`, fotoURL:null, mieterBuchung:true, createdAt:new Date().toISOString() };
             const ref = await addDoc(collection(db, `users/${uid}/buchungen`), b);
             State.buchungen.push({ id: ref.id, ...b });
-            vorhandenKalt.add(datumISO);
+            vorhandenKalt.add(monatKey);
             neu++;
           }
 
-          if (cfg.nebenkosten > 0 && !vorhandenNeben.has(datumISO)) {
-            const b = { typ:'einnahme', kategorie:'Nebenkostenvorauszahlung', betrag:cfg.nebenkosten, waehrung:cfg.waehrung, datum:datumISO, notiz:`Nebenkosten ${monatKey}`, fotoURL:null, mieterBuchung:true, createdAt:new Date().toISOString() };
+          if (nebenkosten > 0 && !vorhandenNeben.has(monatKey)) {
+            const b = { typ:'einnahme', kategorie:'Nebenkostenvorauszahlung', betrag:nebenkosten, waehrung:cfg.waehrung, datum:datumISO, notiz:`Nebenkosten ${monatKey}`, fotoURL:null, mieterBuchung:true, createdAt:new Date().toISOString() };
             const ref = await addDoc(collection(db, `users/${uid}/buchungen`), b);
             State.buchungen.push({ id: ref.id, ...b });
-            vorhandenNeben.add(datumISO);
+            vorhandenNeben.add(monatKey);
             neu++;
           }
 
@@ -2406,8 +2514,8 @@ const App = {
         }
 
         State.buchungen.sort((a, b) => b.datum.localeCompare(a.datum));
-        const monate = Math.round(State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Kaltmiete').length);
-        if (neu > 0) this._setStatus(`${Math.round(neu / (cfg.nebenkosten > 0 ? 2 : 1))} neue Monate eingetragen (gesamt ${monate}).`, false);
+        const monate = State.buchungen.filter(b => b.mieterBuchung && b.kategorie === 'Kaltmiete').length;
+        if (neu > 0) this._setStatus(`${neu} neue Buchungen angelegt (${monate} Monate Kaltmiete gesamt).`, false);
         else this._setStatus('Alle Monate bereits vorhanden.', false);
 
       } catch(e) { this._setStatus('Fehler: ' + e.message, true); }
