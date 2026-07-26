@@ -504,13 +504,16 @@
     <!-- ── ÜBERSICHT ── -->
     <div id="page-uebersicht" class="page hidden">
       <div class="row-between" style="margin-bottom:1rem;">
-        <div>
-          <h2 id="ueb-jahr">2025</h2>
-          <p class="muted text-xs">Jahresübersicht</p>
+        <div style="display:flex;align-items:center;gap:.5rem;">
+          <button class="btn-sm" id="ueb-prev-btn" onclick="App.changeJahr(-1)">&#8249;</button>
+          <div style="text-align:center;min-width:90px;">
+            <h2 id="ueb-jahr" style="line-height:1.1;"></h2>
+            <p class="muted text-xs" id="ueb-jahr-label">Jahresübersicht</p>
+          </div>
+          <button class="btn-sm" id="ueb-next-btn" onclick="App.changeJahr(1)">&#8250;</button>
         </div>
         <div class="row" style="gap:.5rem;">
-          <button class="btn-sm" onclick="App.changeJahr(-1)">&#8249;</button>
-          <button class="btn-sm" onclick="App.changeJahr(1)">&#8250;</button>
+          <button class="btn-sm" id="ueb-alle-btn" onclick="App.toggleAlleJahre()" style="font-size:.75rem;">Alle</button>
           <button class="btn-sm" onclick="App.toggleWaehrung()" id="ueb-waehrung-btn">CHF</button>
         </div>
       </div>
@@ -603,11 +606,11 @@
 
         <div class="card" style="padding:1.25rem;border:1.5px solid var(--danger);">
           <h3 style="margin-bottom:.5rem;color:var(--danger);">Gefahrenzone</h3>
-          <p class="text-sm muted" style="margin-bottom:1rem;">Alle Buchungen unwiderruflich loeschen. Serien, Einstellungen und Darlehenskonfiguration bleiben erhalten.</p>
+          <p class="text-sm muted" style="margin-bottom:1rem;">Alle Buchungen unwiderruflich löschen. Serien, Einstellungen und Darlehenskonfiguration bleiben erhalten.</p>
           <div id="delete-all-status" class="hidden text-sm" style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;"></div>
           <div class="stack" style="gap:.625rem;">
             <button class="btn btn-secondary" id="dedup-btn" onclick="App.dedupBuchungen()">Doppelte Buchungen bereinigen</button>
-            <button class="btn btn-danger" id="delete-all-btn" onclick="App.deleteAllBuchungen()">Alle Buchungen loeschen</button>
+            <button class="btn btn-danger" id="delete-all-btn" onclick="App.deleteAllBuchungen()">Alle Buchungen löschen</button>
           </div>
         </div>
 
@@ -816,7 +819,7 @@
             <div id="d-serie-status" class="hidden text-sm" style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;"></div>
             <div class="stack" style="gap:.625rem;">
               <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.resetUndSync()">Kreditbuchungen neu berechnen</button>
-              <button class="btn btn-danger" id="d-delete-btn" onclick="App.darlehen.deleteAllBuchungen()">Alle Kreditbuchungen loeschen</button>
+              <button class="btn btn-danger" id="d-delete-btn" onclick="App.darlehen.deleteAllBuchungen()">Alle Kreditbuchungen löschen</button>
             </div>
           </div>
 
@@ -834,7 +837,7 @@
                 <label for="d-sonder-betrag">Betrag</label>
                 <input id="d-sonder-betrag" type="number" inputmode="decimal" placeholder="z.B. 10000" min="0" step="100" />
               </div>
-              <button class="btn btn-secondary" onclick="App.darlehen.addSondertilgung()">Hinzufuegen</button>
+              <button class="btn btn-secondary" onclick="App.darlehen.addSondertilgung()">Hinzufügen</button>
             </div>
           </div>
 
@@ -901,9 +904,9 @@
 
       <!-- Mieterhöhungen -->
       <div class="card" style="padding:1.25rem;">
-        <h3 style="margin-bottom:.25rem;">Mieterhoehungen</h3>
+        <h3 style="margin-bottom:.25rem;">Mieterhöhungen</h3>
         <p class="text-sm muted" style="margin-bottom:1rem;">Ab dem gewaehlten Monat gelten die neuen Betraege. Buchungen werden beim Neu-Berechnen automatisch angepasst.</p>
-        <div id="m-erhoehung-list" class="stack" style="margin-bottom:1rem;"></div>
+        <div id="m-erhöhung-list" class="stack" style="margin-bottom:1rem;"></div>
         <div class="stack" style="gap:.625rem;">
           <div class="form-group">
             <label for="m-erh-datum">Ab Monat</label>
@@ -911,7 +914,7 @@
           </div>
           <div class="form-group">
             <label for="m-erh-typ">Was aendert sich?</label>
-            <select id="m-erh-typ" onchange="App.mieter.onErhoehungTypChange()">
+            <select id="m-erh-typ" onchange="App.mieter.onErhöhungTypChange()">
               <option value="kalt">Nur Kaltmiete</option>
               <option value="neben">Nur Nebenkosten</option>
               <option value="beide">Kaltmiete &amp; Nebenkosten</option>
@@ -925,18 +928,18 @@
             <label for="m-erh-neben">Neue Nebenkosten</label>
             <input id="m-erh-neben" type="number" inputmode="decimal" placeholder="z.B. 250" min="0" step="10" />
           </div>
-          <button class="btn btn-secondary" onclick="App.mieter.addErhoehung()">Hinzufuegen</button>
+          <button class="btn btn-secondary" onclick="App.mieter.addErhöhung()">Hinzufügen</button>
         </div>
       </div>
 
       <!-- Buchungen -->
       <div class="card" style="padding:1.25rem;">
         <h3 style="margin-bottom:.5rem;">Mietbuchungen</h3>
-        <p class="text-sm muted" style="margin-bottom:1rem;">Legt fuer jeden Monat seit Mietbeginn bis heute je eine Kaltmiete- und Nebenkostenbuchung an. Nach einer Mieterhoehung: Neu berechnen.</p>
+        <p class="text-sm muted" style="margin-bottom:1rem;">Legt für jeden Monat seit Mietbeginn bis heute je eine Kaltmiete- und Nebenkostenbuchung an. Nach einer Mieterhöhung: Neu berechnen.</p>
         <div id="m-status" class="hidden text-sm" style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;"></div>
         <div class="stack" style="gap:.625rem;">
           <button class="btn btn-primary" id="m-sync-btn" onclick="App.mieter.resetUndSync()">Mietbuchungen neu berechnen</button>
-          <button class="btn btn-danger" id="m-delete-btn" onclick="App.mieter.deleteAll()">Alle Mietbuchungen loeschen</button>
+          <button class="btn btn-danger" id="m-delete-btn" onclick="App.mieter.deleteAll()">Alle Mietbuchungen löschen</button>
         </div>
       </div>
 
@@ -955,7 +958,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
       </svg>
-      Ubersicht
+      Übersicht
     </button>
     <button class="nav-btn" id="nav-buchungen" onclick="App.goto('buchungen')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -1116,7 +1119,7 @@ const State = {
   darlehenCfg:   null,
   sondertilgungen: [],
   mieterCfg:     null,   // { kaltmiete, nebenkosten, waehrung, startDatum, faelligTag }
-  mieterErhoehungen: [], // [{datum:'YYYY-MM', typ:'kalt'|'neben'|'beide', kaltmiete?:1300, nebenkosten?:250}]
+  mieterErhöhungen: [], // [{datum:'YYYY-MM', typ:'kalt'|'neben'|'beide', kaltmiete?:1300, nebenkosten?:250}]
   jahr:          new Date().getFullYear(),
   anzeigeWaehrung: 'EUR',
   kurs:          0.94,
@@ -1211,7 +1214,7 @@ async function loadMieterCfg() {
   if (snap.exists()) {
     const data = snap.data();
     State.mieterCfg        = data;
-    State.mieterErhoehungen = data.erhoehungen || [];
+    State.mieterErhöhungen = data.erhöhungen || [];
   }
 }
 
@@ -1306,7 +1309,7 @@ const App = {
     if (navBtn) navBtn.classList.add('active');
 
     const titles = {
-      uebersicht:    'Ubersicht',
+      uebersicht:    'Übersicht',
       buchungen:     'Buchungen',
       neu:           'Neue Buchung',
       einstellungen: 'Einstellungen',
@@ -1316,10 +1319,10 @@ const App = {
     };
     document.getElementById('topbar-title').textContent = titles[page] || '';
 
-    // Back-Button fuer Unterseiten / Plus-Button fuer Buchungen
+    // Back-Button für Unterseiten / Plus-Button fuer Buchungen
     const action = document.getElementById('topbar-action');
     if (page === 'serien') {
-      action.innerHTML = `<button class="btn-sm" onclick="App.goto('einstellungen')" style="font-size:.8125rem;">Zurueck</button>`;
+      action.innerHTML = `<button class="btn-sm" onclick="App.goto('einstellungen')" style="font-size:.8125rem;">Zurück</button>`;
     } else if (page === 'buchungen') {
       action.innerHTML = `<button class="plus-btn" onclick="App.openModal()" aria-label="Neue Buchung">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1520,10 +1523,37 @@ const App = {
   },
 
   // ── Übersicht ────────────────────────────────────────────────────────────
+  updateJahrUI() {
+    const jahrEl   = document.getElementById('ueb-jahr');
+    const labelEl  = document.getElementById('ueb-jahr-label');
+    const prevBtn  = document.getElementById('ueb-prev-btn');
+    const nextBtn  = document.getElementById('ueb-next-btn');
+    const alleBtn  = document.getElementById('ueb-alle-btn');
+    const alleAktiv = State.jahr === null;
+    if (jahrEl)  jahrEl.textContent  = alleAktiv ? 'Alle Jahre' : String(State.jahr);
+    if (labelEl) labelEl.textContent = alleAktiv ? 'Gesamtübersicht' : 'Jahresübersicht';
+    if (prevBtn) prevBtn.style.visibility = alleAktiv ? 'hidden' : 'visible';
+    if (nextBtn) nextBtn.style.visibility = alleAktiv ? 'hidden' : 'visible';
+    if (alleBtn) {
+      alleBtn.style.background    = alleAktiv ? 'var(--accent)' : '';
+      alleBtn.style.color         = alleAktiv ? '#fff' : '';
+      alleBtn.style.borderColor   = alleAktiv ? 'var(--accent)' : '';
+    }
+  },
+
   changeJahr(delta) {
+    if (State.jahr === null) return;
     State.jahr += delta;
-    document.getElementById('ueb-jahr').textContent = State.jahr;
+    App.updateJahrUI();
     App.renderUebersicht();
+    if (State.currentPage === 'buchungen') App.renderBuchungen();
+  },
+
+  toggleAlleJahre() {
+    State.jahr = State.jahr === null ? new Date().getFullYear() : null;
+    App.updateJahrUI();
+    App.renderUebersicht();
+    if (State.currentPage === 'buchungen') App.renderBuchungen();
   },
 
   toggleWaehrung() {
@@ -1535,7 +1565,8 @@ const App = {
 
   renderUebersicht() {
     const jahresBuchungen = State.buchungen.filter(b => {
-      return b.datum && b.datum.startsWith(String(State.jahr));
+      if (!b.datum) return false;
+      return State.jahr === null || b.datum.startsWith(String(State.jahr));
     });
 
     let einnahmen = 0, ausgaben = 0;
@@ -1575,7 +1606,7 @@ const App = {
     // Kategorientabelle
     const container = document.getElementById('ueb-kategorien');
     if (Object.keys(byKat).length === 0) {
-      container.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:.875rem;">Keine Buchungen in ' + State.jahr + '</div>';
+      container.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:.875rem;">Keine Buchungen' + (State.jahr ? ' in ' + State.jahr : '') + '</div>';
       return;
     }
 
@@ -1608,8 +1639,10 @@ const App = {
     // Kategorien die zu Mietbuchungen gehören (pro Datum zusammenfassen)
     const MIETE_KAT  = new Set(['Kaltmiete', 'Nebenkostenvorauszahlung']);
 
-    // Nur Buchungen des aktuellen Jahres (wie Übersicht)
-    const jahresBuchungen = State.buchungen.filter(b => b.datum && b.datum.startsWith(String(State.jahr)));
+    // Buchungen nach Jahr filtern (null = alle Jahre)
+    const jahresBuchungen = State.buchungen.filter(b =>
+      b.datum && (State.jahr === null || b.datum.startsWith(String(State.jahr)))
+    );
 
     // Schritt 1: Kreditbuchungen nach Datum gruppieren
     const kreditByDatum = {};
@@ -1685,7 +1718,7 @@ const App = {
           <div class="buchung-info">
             <div class="buchung-kategorie">${b.kategorie}</div>
             <div class="buchung-datum">${fmtDate(b.datum)}${b.notiz ? ' · ' + b.notiz : ''}</div>
-            ${b.serieId ? `<div class="recurring-badge">${recurringIcon}${b.wiederholung === 'monatlich' ? 'Monatlich' : 'Jahrlich'}</div>` : ''}
+            ${b.serieId ? `<div class="recurring-badge">${recurringIcon}${b.wiederholung === 'monatlich' ? 'Monatlich' : 'Jährlich'}</div>` : ''}
           </div>
           <div>
             <div class="buchung-betrag ${b.typ === 'einnahme' ? 'income' : 'expense'}">
@@ -2209,7 +2242,7 @@ const App = {
       const anzahlKredit = State.buchungen.filter(b => b.darlehenBuchung === true).length;
       if (anzahlKredit > 0) {
         const monate = Math.round(anzahlKredit / 2);
-        this._setStatus(`${monate} Monate bereits eingetragen. Aktualisieren fuer neue Monate.`, false);
+        this._setStatus(`${monate} Monate bereits eingetragen. Aktualisieren für neue Monate.`, false);
       }
     },
 
@@ -2290,14 +2323,14 @@ const App = {
       el.classList.remove('hidden');
     },
 
-    // Alle Kreditbuchungen loeschen (rueckwirkend)
+    // Alle Kreditbuchungen löschen (rückwirkend)
     async deleteAllBuchungen() {
       const vorhandene = State.buchungen.filter(b => b.darlehenBuchung === true);
       if (vorhandene.length === 0) {
         this._setStatus('Keine Kreditbuchungen vorhanden.', false);
         return;
       }
-      if (!confirm(`Wirklich alle ${vorhandene.length} Kreditbuchungen (Zinsen + Tilgung) loeschen?\n\nDiese Aktion kann nicht rueckgaengig gemacht werden.`)) return;
+      if (!confirm(`Wirklich alle ${vorhandene.length} Kreditbuchungen (Zinsen + Tilgung) löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`)) return;
 
       const delBtn = document.getElementById('d-delete-btn');
       const syncBtn = document.getElementById('d-serie-btn');
@@ -2320,14 +2353,14 @@ const App = {
         this._setStatus(`${vorhandene.length} Kreditbuchungen geloescht.`, false);
         delBtn.disabled = false;
         syncBtn.disabled = false;
-        delBtn.textContent = 'Alle Kreditbuchungen loeschen';
+        delBtn.textContent = 'Alle Kreditbuchungen löschen';
         syncBtn.textContent = 'Kreditbuchungen aktualisieren';
 
       } catch (e) {
         delBtn.disabled = false;
         syncBtn.disabled = false;
-        delBtn.textContent = 'Alle Kreditbuchungen loeschen';
-        this._setStatus('Fehler beim Loeschen: ' + e.message, true);
+        delBtn.textContent = 'Alle Kreditbuchungen löschen';
+        this._setStatus('Fehler beim Löschen: ' + e.message, true);
       }
     },
 
@@ -2351,7 +2384,7 @@ const App = {
           document.getElementById('d-serie-btn').disabled = false;
           document.getElementById('d-delete-btn').disabled = false;
           document.getElementById('d-serie-btn').textContent = 'Kreditbuchungen neu berechnen';
-          this._setStatus('Fehler beim Loeschen: ' + e.message, true);
+          this._setStatus('Fehler beim Löschen: ' + e.message, true);
           return;
         }
       }
@@ -2441,7 +2474,7 @@ const App = {
         syncBtn.disabled = false;
         delBtn.disabled  = false;
         syncBtn.textContent = 'Kreditbuchungen aktualisieren';
-        delBtn.textContent  = 'Alle Kreditbuchungen loeschen';
+        delBtn.textContent  = 'Alle Kreditbuchungen löschen';
 
       } catch (e) {
         syncBtn.disabled = false;
@@ -2478,7 +2511,7 @@ const App = {
       return;
     }
 
-    const wdhLabel = { monatlich: 'Monatlich', jaehrlich: 'Jahrlich' };
+    const wdhLabel = { monatlich: 'Monatlich', jaehrlich: 'Jährlich' };
 
     // Aktive zuerst, dann gestoppte
     const sorted = [...State.serien].sort((a, b) => {
@@ -2514,11 +2547,11 @@ const App = {
               ${s.typ === 'ausgabe' ? '\u2212' : '+'}${fmt(s.betrag, s.waehrung)}
             </div>
             ${stopBtn ? stopBtn : ''}
-            <button class="serie-delete-btn" onclick="App.deleteSerie('${s.id}')" title="Serie loschen">${trashIcon}</button>
+            <button class="serie-delete-btn" onclick="App.deleteSerie('${s.id}')" title="Serie löschen">${trashIcon}</button>
           </div>
         </div>`;
       }).join('<div class="divider"></div>') +
-    '</div><p class="text-xs muted" style="margin-top:.75rem;text-align:center;">Stoppen beendet neue Buchungen. Bestehende Buchungen bleiben immer unverandert.</p>';
+    '</div><p class="text-xs muted" style="margin-top:.75rem;text-align:center;">Stoppen beendet neue Buchungen. Bestehende Buchungen bleiben immer unverändert.</p>';
 
     container.innerHTML = html;
   },
@@ -2538,7 +2571,7 @@ const App = {
   },
 
   async deleteSerie(serieId) {
-    if (!confirm('Serie endgultig loschen?\n\nAlle bereits erzeugten Buchungen bleiben unverandert erhalten.')) return;
+    if (!confirm('Serie endgültig löschen?\n\nAlle bereits erzeugten Buchungen bleiben unverändert erhalten.')) return;
     const { db, doc, deleteDoc } = window._fb;
     const uid = State.user.uid;
     try {
@@ -2546,7 +2579,7 @@ const App = {
       State.serien = State.serien.filter(s => s.id !== serieId);
       App.renderSerien();
     } catch (e) {
-      alert('Fehler beim Loschen: ' + e.message);
+      alert('Fehler beim Löschen: ' + e.message);
     }
   },
 
@@ -2565,7 +2598,7 @@ const App = {
         document.getElementById('m-start').value       = cfg.startDatum  || '';
         document.getElementById('m-faellig').value     = cfg.faelligTag  || 1;
       }
-      this.renderErhoehungen();
+      this.renderErhöhungen();
       this.renderVorschau();
       const anzahl = State.buchungen.filter(b => b.mieterBuchung === true).length;
       if (anzahl > 0) {
@@ -2576,7 +2609,7 @@ const App = {
     },
 
     // Zeigt/versteckt Kaltmiete- und Nebenkosten-Felder je nach Typ
-    onErhoehungTypChange() {
+    onErhöhungTypChange() {
       const typ = document.getElementById('m-erh-typ').value;
       document.getElementById('m-erh-kalt-wrap').classList.toggle('hidden',  typ === 'neben');
       document.getElementById('m-erh-neben-wrap').classList.toggle('hidden', typ === 'kalt');
@@ -2590,10 +2623,10 @@ const App = {
       el.classList.remove('hidden');
     },
 
-    renderErhoehungen() {
-      const el = document.getElementById('m-erhoehung-list');
-      if (!State.mieterErhoehungen.length) { el.innerHTML = '<p class="text-sm muted">Keine Erhoehungen eingetragen.</p>'; return; }
-      const sorted = [...State.mieterErhoehungen].sort((a, b) => a.datum.localeCompare(b.datum));
+    renderErhöhungen() {
+      const el = document.getElementById('m-erhöhung-list');
+      if (!State.mieterErhöhungen.length) { el.innerHTML = '<p class="text-sm muted">Keine Erhöhungen eingetragen.</p>'; return; }
+      const sorted = [...State.mieterErhöhungen].sort((a, b) => a.datum.localeCompare(b.datum));
       const w = State.mieterCfg?.waehrung || 'EUR';
       el.innerHTML = sorted.map((e, i) => {
         const typLabels = { kalt: 'Kaltmiete', neben: 'Nebenkosten', beide: 'Kaltmiete &amp; Nebenkosten' };
@@ -2611,7 +2644,7 @@ const App = {
             </div>
             <div class="text-xs muted" style="margin-top:.15rem;">${details}</div>
           </div>
-          <button class="btn-sm" style="flex-shrink:0;color:var(--danger);" onclick="App.mieter.removeErhoehung(${i})">Loeschen</button>
+          <button class="btn-sm" style="flex-shrink:0;color:var(--danger);" onclick="App.mieter.removeErhöhung(${i})">Löschen</button>
         </div>`;
       }).join('');
     },
@@ -2645,12 +2678,12 @@ const App = {
         </div>`;
     },
 
-    // Gibt die gueltige Kaltmiete fuer einen Monat (YYYY-MM) zurueck
+    // Gibt die gültige Kaltmiete fuer einen Monat (YYYY-MM) zurueck
     kaltmieteAmMonat(yyyymm) {
       const cfg = State.mieterCfg;
       if (!cfg) return 0;
       let miete = cfg.kaltmiete || 0;
-      const sorted = [...State.mieterErhoehungen].sort((a, b) => a.datum.localeCompare(b.datum));
+      const sorted = [...State.mieterErhöhungen].sort((a, b) => a.datum.localeCompare(b.datum));
       for (const e of sorted) {
         if (e.datum <= yyyymm) {
           const typ = e.typ || 'kalt';
@@ -2662,12 +2695,12 @@ const App = {
       return miete;
     },
 
-    // Gibt die gueltigen Nebenkosten fuer einen Monat (YYYY-MM) zurueck
+    // Gibt die gültigen Nebenkosten fuer einen Monat (YYYY-MM) zurueck
     nebenkostenAmMonat(yyyymm) {
       const cfg = State.mieterCfg;
       if (!cfg) return 0;
       let neben = cfg.nebenkosten || 0;
-      const sorted = [...State.mieterErhoehungen].sort((a, b) => a.datum.localeCompare(b.datum));
+      const sorted = [...State.mieterErhöhungen].sort((a, b) => a.datum.localeCompare(b.datum));
       for (const e of sorted) {
         if (e.datum <= yyyymm) {
           const typ = e.typ || 'kalt';
@@ -2693,7 +2726,7 @@ const App = {
         return;
       }
 
-      const cfg = { kaltmiete, nebenkosten, waehrung, startDatum, faelligTag, erhoehungen: State.mieterErhoehungen };
+      const cfg = { kaltmiete, nebenkosten, waehrung, startDatum, faelligTag, erhöhungen: State.mieterErhöhungen };
       const { db, doc, setDoc } = window._fb;
       await setDoc(doc(db, `users/${State.user.uid}/settings/mieter`), cfg);
       State.mieterCfg = cfg;
@@ -2705,7 +2738,7 @@ const App = {
       this.renderVorschau();
     },
 
-    addErhoehung() {
+    addErhöhung() {
       const datum = document.getElementById('m-erh-datum').value;
       const typ   = document.getElementById('m-erh-typ').value;
       if (!datum) return;
@@ -2728,44 +2761,44 @@ const App = {
       if (typ === 'neben' || typ === 'beide') eintrag.nebenkosten = nebenkostenVal;
 
       // Ersetze falls selber Monat schon existiert
-      State.mieterErhoehungen = State.mieterErhoehungen.filter(e => e.datum !== datum);
-      State.mieterErhoehungen.push(eintrag);
+      State.mieterErhöhungen = State.mieterErhöhungen.filter(e => e.datum !== datum);
+      State.mieterErhöhungen.push(eintrag);
 
       // Felder zuruecksetzen
       document.getElementById('m-erh-datum').value  = '';
       document.getElementById('m-erh-kalt').value   = '';
       document.getElementById('m-erh-neben').value  = '';
       document.getElementById('m-erh-typ').value    = 'kalt';
-      this.onErhoehungTypChange();
+      this.onErhöhungTypChange();
 
       // Sofort in Firestore speichern
       if (State.mieterCfg) {
-        State.mieterCfg.erhoehungen = State.mieterErhoehungen;
+        State.mieterCfg.erhöhungen = State.mieterErhöhungen;
         const { db, doc, setDoc } = window._fb;
         setDoc(doc(db, `users/${State.user.uid}/settings/mieter`), State.mieterCfg).catch(console.error);
       }
-      this.renderErhoehungen();
+      this.renderErhöhungen();
       this.renderVorschau();
     },
 
-    removeErhoehung(idx) {
-      const sorted = [...State.mieterErhoehungen].sort((a, b) => a.datum.localeCompare(b.datum));
+    removeErhöhung(idx) {
+      const sorted = [...State.mieterErhöhungen].sort((a, b) => a.datum.localeCompare(b.datum));
       sorted.splice(idx, 1);
-      State.mieterErhoehungen = sorted;
+      State.mieterErhöhungen = sorted;
       if (State.mieterCfg) {
-        State.mieterCfg.erhoehungen = State.mieterErhoehungen;
+        State.mieterCfg.erhöhungen = State.mieterErhöhungen;
         const { db, doc, setDoc } = window._fb;
         setDoc(doc(db, `users/${State.user.uid}/settings/mieter`), State.mieterCfg).catch(console.error);
       }
-      this.renderErhoehungen();
+      this.renderErhöhungen();
       this.renderVorschau();
     },
 
-    // Alle Mietbuchungen loeschen
+    // Alle Mietbuchungen löschen
     async deleteAll() {
       const vorhandene = State.buchungen.filter(b => b.mieterBuchung === true);
       if (!vorhandene.length) { this._setStatus('Keine Mietbuchungen vorhanden.', false); return; }
-      if (!confirm(`Wirklich alle ${vorhandene.length} Mietbuchungen loeschen?`)) return;
+      if (!confirm(`Wirklich alle ${vorhandene.length} Mietbuchungen löschen?`)) return;
 
       const syncBtn = document.getElementById('m-sync-btn');
       const delBtn  = document.getElementById('m-delete-btn');
@@ -2782,7 +2815,7 @@ const App = {
 
       syncBtn.disabled = delBtn.disabled = false;
       syncBtn.textContent = 'Mietbuchungen neu berechnen';
-      delBtn.textContent  = 'Alle Mietbuchungen loeschen';
+      delBtn.textContent  = 'Alle Mietbuchungen löschen';
     },
 
     // Loescht alle und legt neu an
@@ -2797,7 +2830,7 @@ const App = {
           for (const b of vorhandene) await deleteDoc(doc(db, `users/${uid}/buchungen/${b.id}`));
           State.buchungen = State.buchungen.filter(b => b.mieterBuchung !== true);
         } catch(e) {
-          this._setStatus('Fehler beim Loeschen: ' + e.message, true);
+          this._setStatus('Fehler beim Löschen: ' + e.message, true);
           document.getElementById('m-sync-btn').disabled = false;
           document.getElementById('m-sync-btn').textContent = 'Mietbuchungen neu berechnen';
           return;
@@ -2880,7 +2913,7 @@ const App = {
 
       syncBtn.disabled = delBtn.disabled = false;
       syncBtn.textContent = 'Mietbuchungen neu berechnen';
-      delBtn.textContent  = 'Alle Mietbuchungen loeschen';
+      delBtn.textContent  = 'Alle Mietbuchungen löschen';
     }
   },
 
@@ -2900,20 +2933,20 @@ const App = {
       const uid = State.user.uid;
 
       const seen = new Map();
-      const zuLoeschen = [];
+      const zuLöschen = [];
       const sorted = [...State.buchungen].sort((a, b) =>
         (a.createdAt || '').localeCompare(b.createdAt || '')
       );
       for (const b of sorted) {
         const key = `${b.datum}__${b.kategorie}__${b.betrag}`;
-        if (seen.has(key)) { zuLoeschen.push(b); } else { seen.set(key, b); }
+        if (seen.has(key)) { zuLöschen.push(b); } else { seen.set(key, b); }
       }
-      for (const b of zuLoeschen) {
+      for (const b of zuLöschen) {
         await deleteDoc(doc(db, `users/${uid}/buchungen/${b.id}`));
       }
-      State.buchungen = State.buchungen.filter(b => !zuLoeschen.find(d => d.id === b.id));
+      State.buchungen = State.buchungen.filter(b => !zuLöschen.find(d => d.id === b.id));
 
-      statusEl.textContent = zuLoeschen.length > 0 ? `${zuLoeschen.length} doppelte Buchungen entfernt.` : 'Keine Duplikate gefunden.';
+      statusEl.textContent = zuLöschen.length > 0 ? `${zuLöschen.length} doppelte Buchungen entfernt.` : 'Keine Duplikate gefunden.';
       statusEl.style.background = 'var(--accent-l)';
       statusEl.style.color = '#1a4731';
       statusEl.classList.remove('hidden');
@@ -2937,7 +2970,7 @@ const App = {
       el.classList.remove('hidden');
       return;
     }
-    if (!confirm(`Wirklich ALLE ${total} Buchungen loeschen?\n\nDiese Aktion kann nicht rueckgaengig gemacht werden.`)) return;
+    if (!confirm(`Wirklich ALLE ${total} Buchungen löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`)) return;
 
     const btn = document.getElementById('delete-all-btn');
     btn.disabled = true;
@@ -2957,10 +2990,10 @@ const App = {
       el.style.color = 'var(--income)';
       el.classList.remove('hidden');
       btn.disabled = false;
-      btn.textContent = 'Alle Buchungen loeschen';
+      btn.textContent = 'Alle Buchungen löschen';
     } catch(e) {
       btn.disabled = false;
-      btn.textContent = 'Alle Buchungen loeschen';
+      btn.textContent = 'Alle Buchungen löschen';
       const el = document.getElementById('delete-all-status');
       el.textContent = 'Fehler: ' + e.message;
       el.style.background = 'var(--danger-l, #fdecea)';
@@ -2991,7 +3024,7 @@ window._boot = function() {
     // Logged in
     State.user = user;
     document.getElementById('settings-email').textContent = user.email;
-    document.getElementById('ueb-jahr').textContent = State.jahr;
+    App.updateJahrUI();
 
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
