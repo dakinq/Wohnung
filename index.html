@@ -932,6 +932,38 @@
                 <div style="padding:.625rem;font-size:.8125rem;font-weight:700;text-align:center;background:var(--accent-l);border-left:1px solid var(--border);color:var(--accent);" id="prog-neu-rest">—</div>
               </div>
 
+              <!-- Nächste Annuität nach Sonderzahlung -->
+              <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:.875rem;">
+                <div style="padding:.5rem .875rem;background:var(--bg);border-bottom:1px solid var(--border);">
+                  <span style="font-size:.75rem;font-weight:600;color:var(--muted);">NÄCHSTE ANNUITÄT NACH SONDERZAHLUNG</span>
+                </div>
+                <div style="padding:.875rem;">
+                  <!-- Betrag -->
+                  <div style="display:flex;align-items:baseline;gap:.375rem;margin-bottom:.75rem;">
+                    <span style="font-size:1.375rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);" id="prog-ann-total">—</span>
+                    <span style="font-size:.75rem;color:var(--muted);">/ Monat</span>
+                  </div>
+                  <!-- Fortschrittsbalken Zins/Tilgung -->
+                  <div style="height:8px;border-radius:4px;overflow:hidden;display:flex;margin-bottom:.625rem;">
+                    <div id="prog-ann-bar-zins" style="background:#8B5E2B;height:100%;transition:width .4s ease;"></div>
+                    <div id="prog-ann-bar-tilg" style="background:var(--accent);height:100%;transition:width .4s ease;"></div>
+                  </div>
+                  <!-- Aufschlüsselung -->
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;">
+                    <div style="background:var(--bg);border-radius:6px;padding:.5rem .625rem;">
+                      <div style="font-size:.68rem;color:#8B5E2B;font-weight:500;margin-bottom:.2rem;">Zinsen</div>
+                      <div style="font-size:.9375rem;font-weight:700;font-variant-numeric:tabular-nums;color:#8B5E2B;" id="prog-ann-zins">—</div>
+                      <div style="font-size:.7rem;color:var(--muted);" id="prog-ann-zins-pct"></div>
+                    </div>
+                    <div style="background:var(--bg);border-radius:6px;padding:.5rem .625rem;">
+                      <div style="font-size:.68rem;color:var(--accent);font-weight:500;margin-bottom:.2rem;">Tilgung</div>
+                      <div style="font-size:.9375rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);" id="prog-ann-tilg">—</div>
+                      <div style="font-size:.7rem;color:var(--muted);" id="prog-ann-tilg-pct"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Ersparnis-Highlight -->
               <div style="background:var(--accent);border-radius:8px;padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;">
                 <span style="font-size:.8125rem;font-weight:600;color:rgba(255,255,255,.85);">Zinsersparnis</span>
@@ -2471,6 +2503,14 @@ const App = {
       const zeitMonate = restOhne - restMit;
       const zeitStr = zeitMonate > 0 ? `${laufzeitStr(zeitMonate)} früher abbezahlt` : '';
 
+      // Erste Annuität nach der Sonderzahlung
+      const ersteNachSonder = idxSonder >= 0 ? planMit[idxSonder + 1] || planMit[idxSonder] : planMit[idxMit + 1] || planMit[idxMit];
+      const annZins  = ersteNachSonder ? ersteNachSonder.zinsen  : 0;
+      const annTilg  = ersteNachSonder ? ersteNachSonder.tilgung : 0;
+      const annTotal = annZins + annTilg;
+      const annZinsPct = annTotal > 0 ? Math.round((annZins / annTotal) * 100) : 0;
+      const annTilgPct = 100 - annZinsPct;
+
       // UI befüllen
       document.getElementById('prog-alt-laufzeit').textContent = laufzeitStr(restOhne);
       document.getElementById('prog-neu-laufzeit').textContent = laufzeitStr(restMit);
@@ -2480,6 +2520,15 @@ const App = {
       document.getElementById('prog-neu-rest').textContent     = fmt(restNachSonder, wk);
       document.getElementById('prog-ersparnis').textContent    = fmt(ersparnis, wk);
       document.getElementById('prog-zeitersparnis').textContent = zeitStr;
+
+      // Annuität-Aufschlüsselung
+      document.getElementById('prog-ann-total').textContent      = fmt(annTotal, wk);
+      document.getElementById('prog-ann-zins').textContent       = fmt(annZins, wk);
+      document.getElementById('prog-ann-zins-pct').textContent   = `${annZinsPct} % der Rate`;
+      document.getElementById('prog-ann-tilg').textContent       = fmt(annTilg, wk);
+      document.getElementById('prog-ann-tilg-pct').textContent   = `${annTilgPct} % der Rate`;
+      document.getElementById('prog-ann-bar-zins').style.width   = `${annZinsPct}%`;
+      document.getElementById('prog-ann-bar-tilg').style.width   = `${annTilgPct}%`;
 
       document.getElementById('prog-ergebnis').classList.remove('hidden');
     },
