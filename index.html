@@ -541,6 +541,34 @@
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;">Nach Kategorie</h3>
+
+      <!-- Kredit-Widget (nur wenn Darlehen konfiguriert) -->
+      <div id="ueb-kredit-widget" class="card hidden" style="padding:1rem 1.25rem;margin-bottom:1rem;cursor:pointer;" onclick="App.goto('darlehen')">
+        <div class="row-between" style="margin-bottom:.6rem;">
+          <span style="font-size:.8125rem;font-weight:600;">Kredit</span>
+          <span style="font-size:.75rem;color:var(--muted);" id="ueb-kredit-pct">—</span>
+        </div>
+        <!-- Fortschrittsbalken -->
+        <div style="height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin-bottom:.75rem;">
+          <div id="ueb-kredit-bar" style="height:100%;border-radius:3px;background:var(--accent);width:0%;transition:width .4s ease;"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;text-align:center;">
+          <div>
+            <div style="font-size:.7rem;color:var(--muted);margin-bottom:.15rem;">Darlehen</div>
+            <div style="font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums;" id="ueb-kredit-darlehen">—</div>
+          </div>
+          <div>
+            <div style="font-size:.7rem;color:var(--accent);margin-bottom:.15rem;">Getilgt</div>
+            <div style="font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums;color:var(--accent);" id="ueb-kredit-getilgt">—</div>
+          </div>
+          <div>
+            <div style="font-size:.7rem;color:var(--muted);margin-bottom:.15rem;">Restschuld</div>
+            <div style="font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums;" id="ueb-kredit-rest">—</div>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem;text-align:center;" id="ueb-kredit-laufzeit"></div>
+      </div>
+
       <div class="card" id="ueb-kategorien" style="overflow:hidden;">
         <div style="padding:1rem;color:var(--muted);font-size:.875rem;">Lade Daten…</div>
       </div>
@@ -815,7 +843,7 @@
           <!-- Buchungen aus Tilgungsplan erzeugen -->
           <div class="card" style="padding:1.25rem;">
             <h3 style="margin-bottom:.5rem;">Kreditbuchungen</h3>
-            <p class="text-sm muted" style="margin-bottom:1rem;">Nach einer Sondertilgung oder Aenderung: Neu berechnen loescht alle alten Buchungen und legt sie mit den korrekten Betraegen neu an.</p>
+            <p class="text-sm muted" style="margin-bottom:1rem;">Nach einer Sondertilgung oder Änderung: Neu berechnen löscht alle alten Buchungen und legt sie mit den korrekten Beträgen neu an.</p>
             <div id="d-serie-status" class="hidden text-sm" style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;"></div>
             <div class="stack" style="gap:.625rem;">
               <button class="btn btn-primary" id="d-serie-btn" onclick="App.darlehen.resetUndSync()">Kreditbuchungen neu berechnen</button>
@@ -882,7 +910,7 @@
             <input id="m-nebenkosten" type="number" inputmode="decimal" placeholder="z.B. 200" min="0" step="10" />
           </div>
           <div class="form-group">
-            <label for="m-waehrung">Waehrung</label>
+            <label for="m-waehrung">Währung</label>
             <select id="m-waehrung">
               <option value="EUR">EUR</option>
               <option value="CHF">CHF</option>
@@ -913,7 +941,7 @@
             <input id="m-erh-datum" type="month" />
           </div>
           <div class="form-group">
-            <label for="m-erh-typ">Was aendert sich?</label>
+            <label for="m-erh-typ">Was ändert sich?</label>
             <select id="m-erh-typ" onchange="App.mieter.onErhöhungTypChange()">
               <option value="kalt">Nur Kaltmiete</option>
               <option value="neben">Nur Nebenkosten</option>
