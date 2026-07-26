@@ -303,11 +303,12 @@
     --tilg-color:    #2D5A3D;
 
     .darlehen-hero {
-      background: var(--accent); border-radius: var(--r);
-      padding: 1.25rem; color: #fff;
+      background: var(--surface); border-radius: var(--r);
+      border: 1px solid var(--border); box-shadow: var(--sh);
+      padding: 1.25rem; color: var(--text);
     }
-    .darlehen-hero .kpi-label { color: rgba(255,255,255,.7); }
-    .darlehen-hero .kpi-value { color: #fff; font-size: 1.75rem; }
+    .darlehen-hero .kpi-label { color: var(--muted); }
+    .darlehen-hero .kpi-value { color: var(--text); font-size: 1.75rem; }
 
     .progress-bar-wrap {
       height: 10px; border-radius: 5px;
@@ -806,11 +807,11 @@
             <div class="kpi-value tabular" id="d-restschuld">—</div>
             <div style="margin-top:.75rem;">
               <div class="row-between" style="margin-bottom:.25rem;">
-                <span style="font-size:.75rem;color:rgba(255,255,255,.7);">Getilgt</span>
-                <span style="font-size:.75rem;color:rgba(255,255,255,.7);" id="d-getilgt-pct">—</span>
+                <span style="font-size:.75rem;color:var(--muted);">Getilgt</span>
+                <span style="font-size:.75rem;color:var(--accent);font-weight:600;" id="d-getilgt-pct">—</span>
               </div>
-              <div class="progress-bar-wrap" style="background:rgba(255,255,255,.2);">
-                <div class="progress-bar-fill" id="d-progress" style="background:#fff;width:0%;"></div>
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" id="d-progress" style="width:0%;"></div>
               </div>
             </div>
           </div>
