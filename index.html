@@ -1650,6 +1650,43 @@ const App = {
       }).join('<div class="divider"></div>');
 
     container.innerHTML = rows;
+
+    // ── Kredit-Widget ──────────────────────────────────────────────────────
+    const widget = document.getElementById('ueb-kredit-widget');
+    const cfg = State.darlehenCfg;
+    if (cfg && cfg.darlehen && cfg.zinsSatz && cfg.annuitaet && cfg.startDatum) {
+      const plan = App.darlehen.tilgungsplan(
+        cfg.darlehen, cfg.zinsSatz, cfg.annuitaet,
+        cfg.startDatum, cfg.ersteZinsen || 0, State.sondertilgungen
+      );
+      if (plan.length) {
+        const idx        = App.darlehen.currentMonthIndex(plan);
+        const current    = plan[idx] || plan[0];
+        const restschuld = current ? current.restschuld : 0;
+        const getilgt    = cfg.darlehen - restschuld;
+        const pct        = Math.min(100, Math.round((getilgt / cfg.darlehen) * 100));
+        const wk         = cfg.waehrung || 'EUR';
+
+        const restMonate  = plan.length - idx;
+        const restJahre   = Math.floor(restMonate / 12);
+        const restMon     = restMonate % 12;
+        const restText    = restJahre > 0
+          ? `${restJahre} J ${restMon > 0 ? restMon + ' M' : ''}`.trim()
+          : `${restMonate} M`;
+
+        document.getElementById('ueb-kredit-darlehen').textContent = fmt(cfg.darlehen, wk);
+        document.getElementById('ueb-kredit-getilgt').textContent  = fmt(getilgt, wk);
+        document.getElementById('ueb-kredit-rest').textContent     = fmt(restschuld, wk);
+        document.getElementById('ueb-kredit-pct').textContent      = `${pct} % getilgt`;
+        document.getElementById('ueb-kredit-bar').style.width      = `${pct}%`;
+        document.getElementById('ueb-kredit-laufzeit').textContent = `Restlaufzeit ca. ${restText}`;
+        widget.classList.remove('hidden');
+      } else {
+        widget.classList.add('hidden');
+      }
+    } else {
+      widget.classList.add('hidden');
+    }
   },
 
   // ── Buchungen Liste ──────────────────────────────────────────────────────
