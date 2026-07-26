@@ -1192,16 +1192,28 @@ async function loadMieterCfg() {
 // Erzeugt fehlende Buchungen aus allen aktiven Serien
 async function syncSerien() {
   if (!State.serien.length) return;
-  const { db, collection, addDoc } = window._fb;
+  const { db, collection, addDoc, deleteDoc, doc } = window._fb;
   const uid = State.user.uid;
   const today = todayISO();
 
   for (const serie of State.serien) {
-    // Gestoppte Serien werden nicht mehr weiter befuellt
     if (serie.stoppDatum) continue;
 
-    const dates = getSerienDates(serie, today);
-    for (const datum of dates) {
+    const sollDates = new Set(getSerienDates(serie, today));
+
+    // Bestehende Buchungen dieser Serie
+    const vorhandene = State.buchungen.filter(b => b.serieId === serie.id);
+
+    // Buchungen mit falschem Datum löschen
+    for (const b of vorhandene) {
+      if (!sollDates.has(b.datum)) {
+        await deleteDoc(doc(db, `users/${uid}/buchungen`, b.id));
+        State.buchungen = State.buchungen.filter(x => x.id !== b.id);
+      }
+    }
+
+    // Fehlende Buchungen anlegen
+    for (const datum of sollDates) {
       const exists = State.buchungen.some(
         b => b.serieId === serie.id && b.datum === datum
       );
