@@ -1505,12 +1505,15 @@ const App = {
     // Kategorien die zu Mietbuchungen gehören (pro Datum zusammenfassen)
     const MIETE_KAT  = new Set(['Kaltmiete', 'Nebenkostenvorauszahlung']);
 
+    // Nur Buchungen des aktuellen Jahres (wie Übersicht)
+    const jahresBuchungen = State.buchungen.filter(b => b.datum && b.datum.startsWith(String(State.jahr)));
+
     // Schritt 1: Kreditbuchungen nach Datum gruppieren
     const kreditByDatum = {};
     const mieteByDatum  = {};
     const einzeln = [];
 
-    for (const b of State.buchungen) {
+    for (const b of jahresBuchungen) {
       if (b.darlehenBuchung && KREDIT_KAT.has(b.kategorie)) {
         if (!kreditByDatum[b.datum]) kreditByDatum[b.datum] = [];
         kreditByDatum[b.datum].push(b);
@@ -1617,6 +1620,8 @@ const App = {
 
     if (items.length === 0) {
       list.innerHTML = '<p class="muted text-sm" style="text-align:center;padding:2rem 0;">Keine Buchungen in dieser Kategorie.</p>';
+      const countEl = document.getElementById('buchungen-count');
+      if (countEl) countEl.textContent = '';
       return;
     }
     list.innerHTML = '<div class="card" style="overflow:hidden;">' +
