@@ -864,6 +864,85 @@
             </div>
           </div>
 
+          <!-- ── NÄCHSTE RATE ── -->
+          <div class="card" style="padding:1.25rem;">
+            <div class="row-between" style="margin-bottom:.875rem;">
+              <span class="bold text-sm">Nächste Rate</span>
+              <span class="text-xs muted" id="d-naechste-monat">—</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;text-align:center;">
+              <div style="background:var(--bg);border-radius:8px;padding:.625rem .5rem;">
+                <div style="font-size:.68rem;color:#8B5E2B;font-weight:500;margin-bottom:.2rem;">Zinsen</div>
+                <div style="font-size:.9375rem;font-weight:700;font-variant-numeric:tabular-nums;color:#8B5E2B;" id="d-naechste-zins">—</div>
+              </div>
+              <div style="background:var(--bg);border-radius:8px;padding:.625rem .5rem;">
+                <div style="font-size:.68rem;color:var(--accent);font-weight:500;margin-bottom:.2rem;">Tilgung</div>
+                <div style="font-size:.9375rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);" id="d-naechste-tilg">—</div>
+              </div>
+              <div style="background:var(--bg);border-radius:8px;padding:.625rem .5rem;">
+                <div style="font-size:.68rem;color:var(--muted);font-weight:500;margin-bottom:.2rem;">Restschuld</div>
+                <div style="font-size:.9375rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);" id="d-naechste-rest">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── PROGNOSE SONDERZAHLUNG ── -->
+          <div class="card" style="padding:1.25rem;">
+            <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.25rem;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span class="bold text-sm">Prognose Sonderzahlung</span>
+            </div>
+            <p class="text-xs muted" style="margin-bottom:1rem;">Simulation – es wird nichts gespeichert.</p>
+
+            <div class="stack" style="gap:.625rem;margin-bottom:1rem;">
+              <div class="row" style="gap:.75rem;">
+                <div class="form-group" style="flex:1;">
+                  <label for="prog-betrag">Betrag</label>
+                  <input id="prog-betrag" type="number" inputmode="decimal" placeholder="z.B. 10000" min="0" step="100" />
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label for="prog-datum">Monat</label>
+                  <input id="prog-datum" type="month" />
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="App.darlehen.berechnePrognose()">Berechnen</button>
+            </div>
+
+            <!-- Ergebnis -->
+            <div id="prog-ergebnis" class="hidden">
+              <div class="divider" style="margin-bottom:.875rem;"></div>
+
+              <!-- Vergleichstabelle -->
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:.875rem;">
+                <!-- Header -->
+                <div style="background:var(--bg);padding:.5rem .625rem;font-size:.68rem;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);"></div>
+                <div style="background:var(--bg);padding:.5rem .625rem;font-size:.68rem;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);border-left:1px solid var(--border);text-align:center;">Aktuell</div>
+                <div style="background:var(--accent);padding:.5rem .625rem;font-size:.68rem;font-weight:600;color:rgba(255,255,255,.85);border-bottom:1px solid rgba(255,255,255,.2);border-left:1px solid rgba(255,255,255,.2);text-align:center;">Mit Sonderzahlung</div>
+                <!-- Restlaufzeit -->
+                <div style="padding:.625rem;font-size:.75rem;color:var(--muted);border-bottom:1px solid var(--border);">Restlaufzeit</div>
+                <div style="padding:.625rem;font-size:.8125rem;font-weight:600;text-align:center;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" id="prog-alt-laufzeit">—</div>
+                <div style="padding:.625rem;font-size:.8125rem;font-weight:700;text-align:center;background:var(--accent-l);border-bottom:1px solid var(--border);border-left:1px solid var(--border);color:var(--accent);" id="prog-neu-laufzeit">—</div>
+                <!-- Gesamtzinsen -->
+                <div style="padding:.625rem;font-size:.75rem;color:var(--muted);border-bottom:1px solid var(--border);">Gesamtzinsen</div>
+                <div style="padding:.625rem;font-size:.8125rem;font-weight:600;text-align:center;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" id="prog-alt-zinsen">—</div>
+                <div style="padding:.625rem;font-size:.8125rem;font-weight:700;text-align:center;background:var(--accent-l);border-bottom:1px solid var(--border);border-left:1px solid var(--border);color:var(--accent);" id="prog-neu-zinsen">—</div>
+                <!-- Restschuld nach Sonderzahlung -->
+                <div style="padding:.625rem;font-size:.75rem;color:var(--muted);">Restschuld danach</div>
+                <div style="padding:.625rem;font-size:.8125rem;font-weight:600;text-align:center;border-left:1px solid var(--border);" id="prog-alt-rest">—</div>
+                <div style="padding:.625rem;font-size:.8125rem;font-weight:700;text-align:center;background:var(--accent-l);border-left:1px solid var(--border);color:var(--accent);" id="prog-neu-rest">—</div>
+              </div>
+
+              <!-- Ersparnis-Highlight -->
+              <div style="background:var(--accent);border-radius:8px;padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:.8125rem;font-weight:600;color:rgba(255,255,255,.85);">Zinsersparnis</span>
+                <span style="font-size:1.125rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;" id="prog-ersparnis">—</span>
+              </div>
+              <div style="text-align:center;margin-top:.5rem;">
+                <span style="font-size:.75rem;color:var(--accent);font-weight:600;" id="prog-zeitersparnis"></span>
+              </div>
+            </div>
+          </div>
+
           <!-- Buchungen aus Tilgungsplan erzeugen -->
           <div class="card" style="padding:1.25rem;">
             <h3 style="margin-bottom:.5rem;">Kreditbuchungen</h3>
@@ -2303,6 +2382,19 @@ const App = {
         document.getElementById('d-bar-zins').style.width      = `${zinsPct}%`;
       }
 
+      // Nächste Rate
+      const naechste = plan[idx + 1] || plan[idx] || null;
+      if (naechste) {
+        const naechsteStr = naechste.datum.substring(0, 7).split('-').reverse().join('.');
+        document.getElementById('d-naechste-monat').textContent = naechsteStr;
+        document.getElementById('d-naechste-zins').textContent  = fmt(naechste.zinsen, waehrung);
+        document.getElementById('d-naechste-tilg').textContent  = fmt(naechste.tilgung, waehrung);
+        document.getElementById('d-naechste-rest').textContent  = fmt(naechste.restschuld, waehrung);
+      }
+      if (!document.getElementById('prog-datum').value && naechste) {
+        document.getElementById('prog-datum').value = naechste.datum.substring(0, 7);
+      }
+
       // Tilgungsplan (erste 24 regulare Monate, Sondertilgungen hervorgehoben)
       const rows = plan.slice(0, 24).map(p => {
         const monatStr = p.datum.substring(0, 7).split('-').reverse().join('.');
@@ -2333,6 +2425,63 @@ const App = {
         const monate = Math.round(anzahlKredit / 2);
         this._setStatus(`${monate} Monate bereits eingetragen. Aktualisieren für neue Monate.`, false);
       }
+    },
+
+    // Prognose Sonderzahlung berechnen (nur Simulation, nichts wird gespeichert)
+    berechnePrognose() {
+      const cfg = State.darlehenCfg;
+      if (!cfg || !cfg.darlehen) return;
+
+      const betrag = parseFloat(document.getElementById('prog-betrag').value) || 0;
+      const datum  = document.getElementById('prog-datum').value; // YYYY-MM
+      if (!betrag || !datum) return;
+
+      const wk = cfg.waehrung || 'EUR';
+
+      // Plan OHNE Sonderzahlung (aktueller Stand)
+      const planOhne = this.tilgungsplan(cfg.darlehen, cfg.zinsSatz, cfg.annuitaet, cfg.startDatum, cfg.ersteZinsen || 0, State.sondertilgungen);
+      // Plan MIT zusätzlicher Sonderzahlung
+      const extraSonder = [...(State.sondertilgungen || []), { datum, betrag }];
+      const planMit  = this.tilgungsplan(cfg.darlehen, cfg.zinsSatz, cfg.annuitaet, cfg.startDatum, cfg.ersteZinsen || 0, extraSonder);
+
+      if (!planOhne.length || !planMit.length) return;
+
+      const idxOhne = this.currentMonthIndex(planOhne);
+      const idxMit  = this.currentMonthIndex(planMit);
+
+      // Restlaufzeit
+      const restOhne = planOhne.length - idxOhne;
+      const restMit  = planMit.length  - idxMit;
+      const laufzeitStr = (m) => {
+        const j = Math.floor(m / 12), mo = m % 12;
+        return j > 0 ? `${j} J ${mo > 0 ? mo + ' M' : ''}`.trim() : `${m} M`;
+      };
+
+      // Gesamtzinsen ab heute
+      const zinsenOhne = planOhne.slice(idxOhne).reduce((s, p) => s + p.zinsen, 0);
+      const zinsenMit  = planMit.slice(idxMit).reduce((s, p) => s + p.zinsen, 0);
+      const ersparnis  = zinsenOhne - zinsenMit;
+
+      // Restschuld nach der Sonderzahlung (im Mit-Plan, im Monat der Zahlung)
+      const idxSonder = planMit.findIndex(p => p.datum.substring(0, 7) === datum);
+      const restNachSonder = idxSonder >= 0 ? planMit[idxSonder].restschuld : planMit[idxMit].restschuld;
+      const restJetzt      = idxOhne >= 0   ? planOhne[idxOhne].restschuld  : planOhne[0].restschuld;
+
+      // Zeitersparnis
+      const zeitMonate = restOhne - restMit;
+      const zeitStr = zeitMonate > 0 ? `${laufzeitStr(zeitMonate)} früher abbezahlt` : '';
+
+      // UI befüllen
+      document.getElementById('prog-alt-laufzeit').textContent = laufzeitStr(restOhne);
+      document.getElementById('prog-neu-laufzeit').textContent = laufzeitStr(restMit);
+      document.getElementById('prog-alt-zinsen').textContent   = fmt(zinsenOhne, wk);
+      document.getElementById('prog-neu-zinsen').textContent   = fmt(zinsenMit, wk);
+      document.getElementById('prog-alt-rest').textContent     = fmt(restJetzt, wk);
+      document.getElementById('prog-neu-rest').textContent     = fmt(restNachSonder, wk);
+      document.getElementById('prog-ersparnis').textContent    = fmt(ersparnis, wk);
+      document.getElementById('prog-zeitersparnis').textContent = zeitStr;
+
+      document.getElementById('prog-ergebnis').classList.remove('hidden');
     },
 
     // Sondertilgungen anzeigen
