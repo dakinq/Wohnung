@@ -388,6 +388,27 @@
     }
     .modal-body { padding: 1rem; }
 
+    /* ── FILTER CHIPS ── */
+    .filter-chip {
+      flex-shrink: 0;
+      padding: .35rem .85rem;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: .8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .filter-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    #buchungen-filter-bar::-webkit-scrollbar { display: none; }
+
     /* Plus button in topbar */
     .plus-btn {
       width: 32px; height: 32px; border-radius: 50%;
@@ -506,6 +527,14 @@
 
     <!-- ── BUCHUNGEN ── -->
     <div id="page-buchungen" class="page hidden">
+      <!-- Filter Chips -->
+      <div id="buchungen-filter-bar" style="display:flex;gap:.5rem;overflow-x:auto;padding:.25rem .05rem .75rem;scrollbar-width:none;">
+        <button class="filter-chip active" data-filter="alle"       onclick="App.setFilter('alle')">Alle</button>
+        <button class="filter-chip"        data-filter="manuell"    onclick="App.setFilter('manuell')">Manuell</button>
+        <button class="filter-chip"        data-filter="serien"     onclick="App.setFilter('serien')">Serien</button>
+        <button class="filter-chip"        data-filter="kredit"     onclick="App.setFilter('kredit')">Kredit</button>
+        <button class="filter-chip"        data-filter="miete"      onclick="App.setFilter('miete')">Miete</button>
+      </div>
       <div class="stack-sm" id="buchungen-list">
         <div class="spinner-dark"></div>
       </div>
@@ -1264,6 +1293,17 @@ const App = {
     if (page === 'mieter')      App.mieter.open();
   },
 
+  // ── Buchungen Filter ─────────────────────────────────────────────────────
+  buchungenFilter: 'alle',
+
+  setFilter(f) {
+    App.buchungenFilter = f;
+    document.querySelectorAll('.filter-chip').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filter === f);
+    });
+    App.renderBuchungen();
+  },
+
   // ── Modal ────────────────────────────────────────────────────────────────
   openModal() {
     App.resetNeu();
@@ -1414,7 +1454,19 @@ const App = {
     document.getElementById('ueb-ausgaben').textContent  = fmt(ausgaben, w);
     document.getElementById('ueb-saldo').textContent     = fmt(saldo, w);
     document.getElementById('ueb-saldo').className       = 'kpi-value tabular ' + (saldo >= 0 ? 'income' : 'expense');
-    document.getElementById('ueb-count').textContent     = jahresBuchungen.length;
+    // Gruppierte Buchungen (Kredit / Miete) als je eine Buchung zählen
+    const KREDIT_KAT_C = new Set(['Hypothekarzinsen / Schuldzinsen', 'Tilgung']);
+    const MIETE_KAT_C  = new Set(['Kaltmiete', 'Nebenkostenvorauszahlung']);
+    const kreditDaten  = new Set();
+    const mieteDaten   = new Set();
+    let einzelnCount   = 0;
+    for (const b of jahresBuchungen) {
+      if (b.darlehenBuchung && KREDIT_KAT_C.has(b.kategorie)) kreditDaten.add(b.datum);
+      else if (b.mieterBuchung && MIETE_KAT_C.has(b.kategorie)) mieteDaten.add(b.datum);
+      else einzelnCount++;
+    }
+    const anzahl = einzelnCount + kreditDaten.size + mieteDaten.size;
+    document.getElementById('ueb-count').textContent = anzahl;
 
     // Kategorientabelle
     const container = document.getElementById('ueb-kategorien');
@@ -1484,9 +1536,21 @@ const App = {
       typ: 'einnahme'
     }));
 
-    // Schritt 3: Alles zusammenführen und nach Datum sortieren
-    const alle = [...gruppenKredit, ...gruppenMiete, ...einzeln]
-      .sort((a, b) => b.datum.localeCompare(a.datum));
+    // Schritt 3: Alles zusammenführen, filtern und nach Datum sortieren
+    const f = App.buchungenFilter;
+    let alleRoh = [];
+    if (f === 'alle') {
+      alleRoh = [...gruppenKredit, ...gruppenMiete, ...einzeln];
+    } else if (f === 'kredit') {
+      alleRoh = [...gruppenKredit];
+    } else if (f === 'miete') {
+      alleRoh = [...gruppenMiete];
+    } else if (f === 'serien') {
+      alleRoh = einzeln.filter(b => b.serieId);
+    } else if (f === 'manuell') {
+      alleRoh = einzeln.filter(b => !b.serieId);
+    }
+    const alle = alleRoh.sort((a, b) => b.datum.localeCompare(a.datum));
 
     // Schritt 4: HTML rendern
     const renderEinzelBuchung = b => `
