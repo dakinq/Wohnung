@@ -528,14 +528,14 @@
     <!-- ── BUCHUNGEN ── -->
     <div id="page-buchungen" class="page hidden">
       <!-- Filter Chips -->
-      <div id="buchungen-filter-bar" style="display:flex;gap:.5rem;overflow-x:auto;padding:.25rem .05rem .75rem;scrollbar-width:none;">
+      <div id="buchungen-filter-bar" style="display:flex;align-items:center;gap:.5rem;overflow-x:auto;padding:.25rem .05rem .75rem;scrollbar-width:none;">
         <button class="filter-chip active" data-filter="alle"       onclick="App.setFilter('alle')">Alle</button>
         <button class="filter-chip"        data-filter="manuell"    onclick="App.setFilter('manuell')">Manuell</button>
         <button class="filter-chip"        data-filter="serien"     onclick="App.setFilter('serien')">Serien</button>
         <button class="filter-chip"        data-filter="kredit"     onclick="App.setFilter('kredit')">Kredit</button>
         <button class="filter-chip"        data-filter="miete"      onclick="App.setFilter('miete')">Miete</button>
+        <span id="buchungen-count" style="flex-shrink:0;margin-left:auto;font-size:.8rem;font-weight:600;color:#7A7670;white-space:nowrap;padding-right:.25rem;"></span>
       </div>
-      <div id="buchungen-count" style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;min-height:1.1rem;"></div>
       <div class="stack-sm" id="buchungen-list">
         <div class="spinner-dark"></div>
       </div>
@@ -1555,12 +1555,17 @@ const App = {
 
     // Zähler aktualisieren
     const countEl = document.getElementById('buchungen-count');
-    const n = alle.length;
-    const f2 = App.buchungenFilter;
-    countEl.textContent = f2 === 'alle'
-      ? `${n} Buchung${n !== 1 ? 'en' : ''}`
-      : `${n} Ergebnis${n !== 1 ? 'se' : ''}`;
-    countEl.style.display = n === 0 ? 'none' : '';
+    if (countEl) {
+      const n = alle.length;
+      const f2 = App.buchungenFilter;
+      if (n === 0) {
+        countEl.textContent = '';
+      } else {
+        countEl.textContent = f2 === 'alle'
+          ? `${n} Buchung${n !== 1 ? 'en' : ''}`
+          : `${n} Ergebnis${n !== 1 ? 'se' : ''}`;
+      }
+    }
 
     // Schritt 4: HTML rendern
     const renderEinzelBuchung = b => `
