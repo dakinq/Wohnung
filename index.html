@@ -1229,15 +1229,20 @@ async function syncSerien() {
 // Berechnet alle faelligen Daten einer Serie bis heute
 function getSerienDates(serie, today) {
   const dates = [];
-  let current = serie.startDatum;
-  while (current <= today) {
-    dates.push(current);
-    const [y, m, d] = current.split('-').map(Number);
+  const [startY, startM, startD] = serie.startDatum.split('-').map(Number);
+  // Originaltag merken (max. 28 damit kein Monatsüberlauf entsteht)
+  const fixTag = Math.min(startD, 28);
+  let y = startY, m = startM;
+
+  while (true) {
+    const datum = `${y}-${String(m).padStart(2,'0')}-${String(fixTag).padStart(2,'0')}`;
+    if (datum > today) break;
+    dates.push(datum);
     if (serie.wiederholung === 'monatlich') {
-      const next = new Date(y, m, d); // m ist bereits +1 durch 0-index
-      current = next.toISOString().split('T')[0];
+      m++;
+      if (m > 12) { m = 1; y++; }
     } else if (serie.wiederholung === 'jaehrlich') {
-      current = `${y + 1}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      y++;
     } else {
       break;
     }
