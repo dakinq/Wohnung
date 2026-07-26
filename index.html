@@ -535,7 +535,7 @@
         <button class="filter-chip"        data-filter="kredit"     onclick="App.setFilter('kredit')">Kredit</button>
         <button class="filter-chip"        data-filter="miete"      onclick="App.setFilter('miete')">Miete</button>
       </div>
-      <div id="buchungen-count" style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;"></div>
+      <div id="buchungen-count" style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;min-height:1.1rem;"></div>
       <div class="stack-sm" id="buchungen-list">
         <div class="spinner-dark"></div>
       </div>
@@ -1552,6 +1552,15 @@ const App = {
       alleRoh = einzeln.filter(b => !b.serieId);
     }
     const alle = alleRoh.sort((a, b) => b.datum.localeCompare(a.datum));
+
+    // Zähler aktualisieren
+    const countEl = document.getElementById('buchungen-count');
+    const n = alle.length;
+    const f2 = App.buchungenFilter;
+    countEl.textContent = f2 === 'alle'
+      ? `${n} Buchung${n !== 1 ? 'en' : ''}`
+      : `${n} Ergebnis${n !== 1 ? 'se' : ''}`;
+    countEl.style.display = n === 0 ? 'none' : '';
 
     // Schritt 4: HTML rendern
     const renderEinzelBuchung = b => `
