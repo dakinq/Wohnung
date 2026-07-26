@@ -503,6 +503,56 @@
 
     <!-- ── ÜBERSICHT ── -->
     <div id="page-uebersicht" class="page hidden">
+
+      <!-- ══ KREDIT-HERO (nur wenn Darlehen konfiguriert) ══ -->
+      <div id="ueb-kredit-widget" class="hidden" style="margin-bottom:1.25rem;cursor:pointer;" onclick="App.goto('darlehen')">
+        <!-- Hauptkarte: dunkelgrün -->
+        <div style="background:var(--accent);border-radius:14px;padding:1.25rem 1.25rem .9rem;">
+          <!-- Kopfzeile -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;">
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+              <span style="font-size:.75rem;font-weight:600;color:rgba(255,255,255,.75);letter-spacing:.05em;text-transform:uppercase;">Kredit</span>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+          <!-- Restschuld gross -->
+          <div style="margin-bottom:1rem;">
+            <div style="font-size:.72rem;color:rgba(255,255,255,.65);margin-bottom:.2rem;">Aktuelle Restschuld</div>
+            <div style="font-size:2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1.1;" id="ueb-kredit-rest">—</div>
+          </div>
+
+          <!-- Fortschrittsbalken -->
+          <div style="margin-bottom:.5rem;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:.35rem;">
+              <span style="font-size:.7rem;color:rgba(255,255,255,.65);">Getilgt</span>
+              <span style="font-size:.7rem;font-weight:600;color:#fff;" id="ueb-kredit-pct">—</span>
+            </div>
+            <div style="height:7px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden;">
+              <div id="ueb-kredit-bar" style="height:100%;border-radius:4px;background:#fff;width:0%;transition:width .5s ease;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Untere Infoleiste -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 14px 14px;overflow:hidden;">
+          <div style="padding:.75rem .5rem;text-align:center;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;color:var(--muted);margin-bottom:.2rem;font-weight:500;">Darlehen</div>
+            <div style="font-size:.875rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);" id="ueb-kredit-darlehen">—</div>
+          </div>
+          <div style="padding:.75rem .5rem;text-align:center;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;color:var(--accent);margin-bottom:.2rem;font-weight:500;">Getilgt</div>
+            <div style="font-size:.875rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);" id="ueb-kredit-getilgt">—</div>
+          </div>
+          <div style="padding:.75rem .5rem;text-align:center;">
+            <div style="font-size:.68rem;color:var(--muted);margin-bottom:.2rem;font-weight:500;">Restlaufzeit</div>
+            <div style="font-size:.875rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);" id="ueb-kredit-laufzeit">—</div>
+          </div>
+        </div>
+      </div>
+      <!-- ══════════════════════════════════════════════════════ -->
+
       <div class="row-between" style="margin-bottom:1rem;">
         <div style="display:flex;align-items:center;gap:.5rem;">
           <button class="btn-sm" id="ueb-prev-btn" onclick="App.changeJahr(-1)">&#8249;</button>
@@ -541,33 +591,6 @@
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;">Nach Kategorie</h3>
-
-      <!-- Kredit-Widget (nur wenn Darlehen konfiguriert) -->
-      <div id="ueb-kredit-widget" class="card hidden" style="padding:1rem 1.25rem;margin-bottom:1rem;cursor:pointer;" onclick="App.goto('darlehen')">
-        <div class="row-between" style="margin-bottom:.6rem;">
-          <span style="font-size:.8125rem;font-weight:600;">Kredit</span>
-          <span style="font-size:.75rem;color:var(--muted);" id="ueb-kredit-pct">—</span>
-        </div>
-        <!-- Fortschrittsbalken -->
-        <div style="height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin-bottom:.75rem;">
-          <div id="ueb-kredit-bar" style="height:100%;border-radius:3px;background:var(--accent);width:0%;transition:width .4s ease;"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;text-align:center;">
-          <div>
-            <div style="font-size:.7rem;color:var(--muted);margin-bottom:.15rem;">Darlehen</div>
-            <div style="font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums;" id="ueb-kredit-darlehen">—</div>
-          </div>
-          <div>
-            <div style="font-size:.7rem;color:var(--accent);margin-bottom:.15rem;">Getilgt</div>
-            <div style="font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums;color:var(--accent);" id="ueb-kredit-getilgt">—</div>
-          </div>
-          <div>
-            <div style="font-size:.7rem;color:var(--muted);margin-bottom:.15rem;">Restschuld</div>
-            <div style="font-size:.8125rem;font-weight:600;font-variant-numeric:tabular-nums;" id="ueb-kredit-rest">—</div>
-          </div>
-        </div>
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem;text-align:center;" id="ueb-kredit-laufzeit"></div>
-      </div>
 
       <div class="card" id="ueb-kategorien" style="overflow:hidden;">
         <div style="padding:1rem;color:var(--muted);font-size:.875rem;">Lade Daten…</div>
@@ -1677,9 +1700,9 @@ const App = {
         document.getElementById('ueb-kredit-darlehen').textContent = fmt(cfg.darlehen, wk);
         document.getElementById('ueb-kredit-getilgt').textContent  = fmt(getilgt, wk);
         document.getElementById('ueb-kredit-rest').textContent     = fmt(restschuld, wk);
-        document.getElementById('ueb-kredit-pct').textContent      = `${pct} % getilgt`;
+        document.getElementById('ueb-kredit-pct').textContent      = `${pct} %`;
         document.getElementById('ueb-kredit-bar').style.width      = `${pct}%`;
-        document.getElementById('ueb-kredit-laufzeit').textContent = `Restlaufzeit ca. ${restText}`;
+        document.getElementById('ueb-kredit-laufzeit').textContent = `ca. ${restText}`;
         widget.classList.remove('hidden');
       } else {
         widget.classList.add('hidden');
