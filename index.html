@@ -535,6 +535,7 @@
         <button class="filter-chip"        data-filter="kredit"     onclick="App.setFilter('kredit')">Kredit</button>
         <button class="filter-chip"        data-filter="miete"      onclick="App.setFilter('miete')">Miete</button>
       </div>
+      <div id="buchungen-count" style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;"></div>
       <div class="stack-sm" id="buchungen-list">
         <div class="spinner-dark"></div>
       </div>
@@ -1600,6 +1601,10 @@ const App = {
       eintrag._gruppe ? renderGruppe(eintrag) : renderEinzelBuchung(eintrag)
     );
 
+    if (items.length === 0) {
+      list.innerHTML = '<p class="muted text-sm" style="text-align:center;padding:2rem 0;">Keine Buchungen in dieser Kategorie.</p>';
+      return;
+    }
     list.innerHTML = '<div class="card" style="overflow:hidden;">' +
       items.join('<div class="divider"></div>') +
       '</div>';
